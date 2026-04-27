@@ -13,15 +13,16 @@
 \title{Modernizing a Spark-Based ETL Platform Using Transactional Lakehouse Technologies on AWS}
 \author{Tommaso Brini}
 \date{\today}
-\supervisor{Prof. Boschetti Marco}
+\supervisor{Prof. Boschetti Marco Antonio}
 \cosupervisor{Dott. CoSupervisor 1}
 \morecosupervisor{Dott. CoSupervisor 2}
 \session{II}
 \academicyear{2025-2026}
+\company{PROMETEIA S.P.A}
 
 % Definition of acronyms
-\acrodef{IoT}{Internet of Thing}
-\acrodef{vm}[VM]{Virtual Machine}
+%\acrodef{IoT}{Internet of Thing}
+%\acrodef{vm}[VM]{Virtual Machine}
 
 
 \mainlinespacing{1.241} % line spacing in mainmatter, comment to default (1)
@@ -31,7 +32,16 @@
 \frontmatter\frontispiece
 
 \begin{abstract}	
-Max 2000 characters, strict.
+Questa tesi analizza la modernizzazione di una piattaforma ETL basata su Apache Spark e AWS Glue, 
+attualmente vincolata all'utilizzo di tabelle Parquet prive di supporto transazionale. 
+L'obiettivo è valutare l'introduzione di tecnologie lakehouse, con particolare attenzione ad Apache Iceberg 
+al fine di abilitare proprietà ACID, time travel, aggiornamenti parziali e una gestione più flessibile e portabile dei metadati.
+
+Nel corso del lavoro è stato progettato e sviluppato un prototipo in grado di eseguire operazioni di INSERT, UPDATE, DELETE e MERGE 
+su dataset di grandi dimensioni, includendo meccanismi per l'automazione della migrazione dei metadati tra ambienti differenti.
+
+La soluzione proposta viene quindi confrontata con l'architettura esistente per valutarne gli effetti in termini di prestazioni, 
+scalabilità e robustezza operativa, evidenziando vantaggi e limiti delle tecnologie lakehouse nel contesto di pipeline ETL in ambiente cloud.
 \end{abstract}
 
 % \begin{dedication} % this is optional
@@ -40,8 +50,8 @@ Max 2000 characters, strict.
 
 %----------------------------------------------------------------------------------------
 \tableofcontents   
-\listoffigures     % (optional) comment if empty
-\lstlistoflistings % (optional) comment if empty
+%\listoffigures     % (optional) comment if empty
+%\lstlistoflistings % (optional) comment if empty
 %----------------------------------------------------------------------------------------
 
 \mainmatter
@@ -51,46 +61,45 @@ Max 2000 characters, strict.
 \label{chap:introduction}
 %----------------------------------------------------------------------------------------
 
-Write your intro here.
-\sidenote{Add sidenotes in this way. They are named after the author of the thesis}
+%Write your intro here.
+%\sidenote{Add sidenotes in this way. They are named after the author of the thesis}
 
-You can use acronyms that your defined previously,
-such as \ac{IoT}.
+% You can use acronyms that your defined previously, such as \ac{IoT}.
 %
-If you use acronyms twice,
-they will be written in full only once
-(indeed, you can mention the \ac{IoT} now without it being fully explained).
+% If you use acronyms twice,
+% they will be written in full only once
+% (indeed, you can mention the \ac{IoT} now without it being fully explained).
 %
-In some cases, you may need a plural form of the acronym.
+% In some cases, you may need a plural form of the acronym.
 %
-For instance,
-that you are discussing \acp{vm},
-you may need both \ac{vm} and \acp{vm}.
+%For instance,
+%that you are discussing \acp{vm},
+%you may need both \ac{vm} and \acp{vm}.
 
-\paragraph{Structure of the Thesis}
+%\paragraph{Structure of the Thesis}
 
-\note{At the end, describe the structure of the paper}
+%\note{At the end, describe the structure of the paper}
 
 \chapter{State of the art}
 
-I suggest referencing stuff as follows: \cref{fig:random-image} or \Cref{fig:random-image}
+%I suggest referencing stuff as follows: \cref{fig:random-image} or \Cref{fig:random-image}
 
-\begin{figure}
-    \centering
-    \includegraphics[width=.8\linewidth]{figures/random-image.pdf}
-    \caption{Some random image}
-    \label{fig:random-image}
-\end{figure}
+%\begin{figure}
+%    \centering
+%    \includegraphics[width=.8\linewidth]{figures/random-image.pdf}
+%    \caption{Some random image}
+%    \label{fig:random-image}
+%\end{figure}
 
-\section{Some cool topic}
+%\section{Some cool topic}
 
 \chapter{Contribution}
 
-You may also put some code snippet (which is NOT float by default), eg: \cref{lst:random-code}.
+%You may also put some code snippet (which is NOT float by default), eg: \cref{lst:random-code}.
 
-\lstinputlisting[float,language=Java,label={lst:random-code}]{listings/HelloWorld.java}
+%\lstinputlisting[float,language=Java,label={lst:random-code}]{listings/HelloWorld.java}
 
-\section{Fancy formulas here}
+%\section{Fancy formulas here}
 
 %----------------------------------------------------------------------------------------
 % BIBLIOGRAPHY

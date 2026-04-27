@@ -38,6 +38,7 @@
 \newcommand{\supervisor}[1]{\def\thesupervisor{#1}}
 \newcommand{\session}[1]{\def\thesession{#1}}
 \newcommand{\academicyear}[1]{\def\theacademicyear{#1}}
+\newcommand{\company}[1]{\def\thecompany{#1}}
 
 \newenvironment{abstract}{\chapter*{\centering\abstractname}\addcontentsline{toc}{chapter}{\abstractname}}{} 
 \newenvironment{acknowledgements}{\chapter*{\acknowledgementsname}}{} 
@@ -106,6 +107,13 @@
                 \\
                 \textbf{\thecosupervisor}
                 \fi
+                \fi
+                \ifdefined\thecompany
+                \\
+                \vspace{0.4cm}
+                \textit{Azienda}
+                \\
+                \textbf{\thecompany}
                 \fi
             \end{flushleft}
         \end{minipage}
