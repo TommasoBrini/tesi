@@ -32,13 +32,13 @@
 \frontmatter\frontispiece
 
 \begin{abstract}	
-Questa tesi analizza la modernizzazione di una piattaforma ETL basata su Apache Spark e AWS Glue, 
-attualmente vincolata all'utilizzo di tabelle Parquet prive di supporto transazionale. 
-L'obiettivo è valutare l'introduzione di tecnologie lakehouse, con particolare attenzione ad Apache Iceberg 
-al fine di abilitare proprietà ACID, time travel, aggiornamenti parziali e una gestione più flessibile e portabile dei metadati.
+Questa tesi analizza la modernizzazione di una piattaforma ETL basata su Apache Spark e AWS Glue,
+precedentemente vincolata a un'architettura Data Lake tradizionale sul formato Parquet.
+L'obiettivo centrale del lavoro è l'introduzione del paradigma Transactional Lakehouse tramite l'adozione di Apache Iceberg.
+L'introduzione di questo table format ha permesso di abilitare proprietà ACID, funzionalità di time travel e una gestione avanzata dei metadati.
 
-Nel corso del lavoro è stato progettato e sviluppato un prototipo in grado di eseguire operazioni di INSERT, UPDATE, DELETE e MERGE 
-su dataset di grandi dimensioni, includendo meccanismi per l'automazione della migrazione dei metadati tra ambienti differenti.
+Nel corso del tirocinio è stato progettato e implementato un prototipo in grado di gestire pipeline complesse (INSERT, UPDATE, DELETE e MERGE) 
+su dataset di grandi dimensioni, includendo una strategia automatizzata per la sincronizzazione del catalogo e dei metadati.
 
 La soluzione proposta viene quindi confrontata con l'architettura esistente per valutarne gli effetti in termini di prestazioni, 
 scalabilità e robustezza operativa, evidenziando vantaggi e limiti delle tecnologie lakehouse nel contesto di pipeline ETL in ambiente cloud.
@@ -57,44 +57,62 @@ scalabilità e robustezza operativa, evidenziando vantaggi e limiti delle tecnol
 \mainmatter
 
 %----------------------------------------------------------------------------------------
-\chapter{Introduction}
+\chapter{Introduzione}
 \label{chap:introduction}
 %----------------------------------------------------------------------------------------
 
-%Write your intro here.
-%\sidenote{Add sidenotes in this way. They are named after the author of the thesis}
+\begin{itemize}
+    \item Contesto aziendale: Descrizione dell'azienda e del dominio applicativo in cui si inserisce il sistema ETL.
+    \item Il problema: Limiti dell'architettura esistente (accenno, riferimento a capitolo 3)
+    \item Obiettivo della tesi: Modernizzazione dell'architettura esistente tramite l'introduzione di un table format transazionale (Iceberg).
+\end{itemize}
 
-% You can use acronyms that your defined previously, such as \ac{IoT}.
-%
-% If you use acronyms twice,
-% they will be written in full only once
-% (indeed, you can mention the \ac{IoT} now without it being fully explained).
-%
-% In some cases, you may need a plural form of the acronym.
-%
-%For instance,
-%that you are discussing \acp{vm},
-%you may need both \ac{vm} and \acp{vm}.
+\chapter{Stato dell'arte e tecnologie}
+\label{chap:state-of-the-art}
 
-%\paragraph{Structure of the Thesis}
+\begin{itemize}
+    \item L'evoluzione delle Architetture Dati: Dal Data Warehouse al Data Lake, fino al paradigma Data Lakehouse.
+    \item Apache Spark: Architettura e ruolo nell'elaborazione distribuita.
+    \item I Table Format Moderni: Analisi comparativa tra Parquet "puro" e Apache Iceberg.
+    \item  Focus su Iceberg: Snapshot, Schema Evolution, Partition Evolution e Time Travel.
+    \item Ecosistema AWS: Panoramica dei servizi utilizzati (S3, Glue Catalog, AWS Glue Jobs, Athena, S3 Tables).
+\end{itemize}
 
-%\note{At the end, describe the structure of the paper}
+\chapter{Analisi As-is: Architettura Esistente}
+\label{chap:existing-architecture}
 
-\chapter{State of the art}
+\begin{itemize}
+    \item Pipeline ETL esistente: Descrizione del flusso dati basato su Spark e file Parquet.
+    \item Pain Points: Analisi dettagliata delle inefficienze riscontrate, i 6 punti critici del documento di formazione.
+\end{itemize}
 
-%I suggest referencing stuff as follows: \cref{fig:random-image} or \Cref{fig:random-image}
+\chapter{Progettazione e Implementazione}
+\label{chap:design-and-implementation}
 
-%\begin{figure}
-%    \centering
-%    \includegraphics[width=.8\linewidth]{figures/random-image.pdf}
-%    \caption{Some random image}
-%    \label{fig:random-image}
-%\end{figure}
+\begin{itemize}
+    \item Design della soluzione (To-Be): Come cambia l'architettura logica.
+    \item Configurazione dello Stack: Integrazione di Iceberg con Spark su AWS.
+    \item Ottimizzazione: Implementazione di processi di Maintenance (Compaction dei file, rimozione dei vecchi snapshot/orphan files).
+\end{itemize}
 
-%\section{Some cool topic}
+\chapter{Test e risultati}
+\label{chap:testing-and-results}
 
-\chapter{Contribution}
+\begin{itemize}
+    \item Benchmark di Performance: Confronto tra il vecchio sistema e il nuovo (tempi di esecuzione del batch).
+    \item Affidabilità: Dimostrazione del supporto alle transazioni ACID (es. cosa succede se un job fallisce a metà).
+    \item Costi: Impatto dell'ottimizzazione dei file (Compaction) sui costi di storage.
+    \item Risposta ai 6 punti critici
+\end{itemize}
 
+
+\chapter{Conclusioni e sviluppi futuri}
+
+\begin{itemize}
+    \item Risultati raggiunti: Sintesi dei benefici ottenuti dall'azienda.
+    \item Limiti riscontrati: Eventuali criticità del framework o dei servizi AWS durante lo sviluppo.
+    \item Evoluzioni: aggiornamento parziale sui record compositi
+\end{itemize}
 %You may also put some code snippet (which is NOT float by default), eg: \cref{lst:random-code}.
 
 %\lstinputlisting[float,language=Java,label={lst:random-code}]{listings/HelloWorld.java}
