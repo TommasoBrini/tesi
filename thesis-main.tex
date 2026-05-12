@@ -61,37 +61,37 @@ scalabilità e robustezza operativa, evidenziando vantaggi e limiti delle tecnol
 \label{chap:introduction}
 %----------------------------------------------------------------------------------------
 
-Il presente lavoro di tesi si svolge presso Prometeia S.P.A, azienda leader nelle soluzioni di consulenza e software per il settore finanziario.
+Il presente lavoro di tesi è stato sviluppato nell'ambito di un tirocinio svolto presso Prometeia S.p.A., azienda attiva nella consulenza e nello sviluppo di soluzioni software per il settore finanziario.
 
-Negli ultimi anni la crescità esponenziale di dati generati da applicazioni distribuite, sistemi transazionali e servizi cloud ha reso necessaria l'evoluzione delle architetture aziendali di gestione e analisi dei dati.
+Negli ultimi anni la crescita esponenziale dei dati generati da applicazioni distribuite, sistemi transazionali e servizi cloud ha reso necessaria l'evoluzione delle architetture aziendali per la gestione e l'analisi dei dati.
 In questo contesto, i processi di \textbf{Extract, Transform, Load} \textbf{(ETL)} hanno assunto un ruolo centrale nelle pipeline di data engineering, richiedendo soluzioni sempre più scalabili, affidabili e flessibili.
 
-L'affermazione dei paradigmi Big Data ha favorito la diffusione dei Data Lake, architetture basate su storage distribuito in grado di memorizzare e gestire grandi quantità di dati eterogenei a costi ridotti.
-In questo contesto, formati colonnari come Apache Parquet hanno rappresentato uno standard de facto per l'elaborazione distribuita tramite framework come Apache Spark.
-Secondo il modello descritto nel paradigma Lakehouse, i Data Lake moderni si basano infatti su storage cloud economico e formati aperti per supportare workload analitici e di machine learning. \cite{armbrust2021lakehouse} \cite{begoli2021lakehouse}
+La diffusione dei paradigmi Big Data ha favorito l'adozione dei Data Lake, architetture basate su storage distribuito in grado di memorizzare e gestire grandi quantità di dati eterogenei a costi ridotti. 
+Formati colonnari come Apache Parquet hanno quindi rappresentato uno standard de facto per l'elaborazione distribuita tramite framework come Apache Spark. 
+Nel modello Lakehouse, i Data Lake moderni si basano infatti su storage cloud economico e formati aperti per supportare workload analitici e di machine learning. \cite{armbrust2021lakehouse} \cite{begoli2021lakehouse}
 
 Nonostante i vantaggi in termini di costo e scalabilità, l'approccio tradizionale basato su file Parquet presenta alcune limitazioni significative.
-In particolare, i Data Lake classici non forniscono nativamente proprietà transazionali ACID, gestione evoluta dei metadati o supporto efficiente per operazioni di aggiornamento incrementale.
-Operazioni come UPDATE, DELETE e MERGE richiedono meccanismi applicativi complessi, spesso basati sulla riscrittura di intere partizioni o dataset, introducendo complessità nelle pipeline ETL e aumentando il rischio di inconsistenze dei dati.
+In particolare, i Data Lake classici non forniscono nativamente proprietà transazionali ACID, una gestione evoluta dei metadati o un supporto efficiente per operazioni di aggiornamento incrementale.
+Operazioni come UPDATE, DELETE e MERGE richiedono quindi meccanismi applicativi complessi, spesso basati sulla riscrittura di intere partizioni o dataset, con un aumento della complessità delle pipeline ETL e del rischio di inconsistenze nei dati.
 
-Per superare tali criticità si è diffuso il paradigma del Data Lakehouse, che combina la flessibilità dei Data Lake con caratteristiche tipiche dei Data Warehouse, introducendo transazioni, versionamento dei dati, schema evolution e gestione avanzata dei metadati. \cite{saha2024disruptor}
+Per superare tali criticità si è diffuso il paradigma del Data Lakehouse, che combina la flessibilità dei Data Lake con caratteristiche tipiche dei Data Warehouse, introducendo transazioni, versionamento dei dati, schema evolution e una gestione avanzata dei metadati. \cite{saha2024disruptor}
 
 Tra le tecnologie emergenti in questo ambito, Apache Iceberg si è affermato come uno dei principali table format open-source per la gestione di dataset analitici su larga scala.
-Iceberg introduce un layer di metadata management che separa la struttura logica della tabella dalla disposizione fisica dei file su storage object-based, permettendo la gestione di snapshot consistenti, time travel e operazioni incrementali transazionali. \cite{IcebergDocs}
+Iceberg introduce un layer di metadata management che separa la struttura logica della tabella dalla disposizione fisica dei file su storage object-based, consentendo la gestione di snapshot consistenti, time travel e operazioni incrementali transazionali. \cite{IcebergDocs}
 
-A differenza di un approccio puramente file-based, Iceberg mantiene lo stato della tabella attraverso metadata versionati e manifest file, consentendo aggioranmenti atomici mediante commit espliciti. \cite{IcebergSpec}
+A differenza di un approccio puramente file-based, Iceberg mantiene lo stato della tabella attraverso metadata versionati e manifest file, consentendo aggiornamenti atomici mediante commit espliciti. \cite{IcebergSpec}
 
-
-Questa tesi si inserisce nel contesto di modernizzazione di una piattaforma ETL aziendale basata su Apache Spark e servizi AWS. 
+Questa tesi si inserisce nel contesto della modernizzazione di una piattaforma ETL aziendale basata su Apache Spark e servizi AWS.
 L'architettura esistente utilizza file Parquet memorizzati su Amazon S3 ed elaborati tramite AWS Glue, presentando criticità legate alla gestione degli aggiornamenti incrementali, alla sincronizzazione del catalogo e alla garanzia di idempotenza dei processi batch.
 
-L'obiettivo del lavoro è progettare e valutare una nuova architettura basata sul paradigma Transactional Lakehouse attraverso l'introduzione di Apache Iceberg. In particolare, il lavoro analizza l'integrazione del table format con Apache Spark e l'ecosistema AWS, includendo aspetti relativi alla gestione dei metadati all'esecuzione di operazioni MERGE transazionali e ai processi di maintenance delle tabelle.
+L'obiettivo del lavoro è progettare e valutare una nuova architettura basata sul paradigma Transactional Lakehouse attraverso l'introduzione di Apache Iceberg.
+In particolare, il lavoro analizza l'integrazione del table format con Apache Spark e l'ecosistema AWS, includendo aspetti relativi alla gestione dei metadati, all'esecuzione di operazioni MERGE transazionali e ai processi di maintenance delle tabelle.
 Durante il progetto sono inoltre state esplorate le funzionalità offerte da \textbf{Amazon S3 Tables} \cite{S3TablesDocs}, soluzione managed introdotta da AWS per la gestione di tabelle Iceberg.
 
 Il contributo principale della tesi consiste nella progettazione e implementazione di un prototipo in grado di eseguire operazioni incrementali affidabili e idempotenti su dataset di grandi dimensioni, confrontando la nuova soluzione con l'architettura preesistente in termini di prestazioni, scalabilità e robustezza.
 L'analisi sperimentale evidenzia inoltre i trade-off introdotti dall'adozione del paradigma lakehouse, valutando vantaggi e limiti sia di un'implementazione Iceberg tradizionale sia dell'approccio gestito offerto da S3 Tables.
 
-La tesi è organizzata come segue. 
+La tesi è organizzata come segue.
 Il Capitolo 2 introduce lo stato dell'arte relativo alle architetture Data Lake e Lakehouse e descrive le principali tecnologie utilizzate.
 Il Capitolo 3 presenta l'analisi dell'architettura esistente e le principali criticità evidenziate.
 Il Capitolo 4 descrive la progettazione e l'implementazione della nuova soluzione basata su Apache Iceberg.
