@@ -91,11 +91,11 @@ Durante il progetto sono inoltre state esplorate le funzionalità offerte da \te
 Il contributo principale della tesi consiste nella progettazione e implementazione di un prototipo in grado di eseguire operazioni incrementali affidabili e idempotenti su dataset di grandi dimensioni, confrontando la nuova soluzione con l'architettura preesistente in termini di prestazioni, scalabilità e robustezza.
 L'analisi sperimentale evidenzia inoltre i trade-off introdotti dall'adozione del paradigma lakehouse, valutando vantaggi e limiti sia di un'implementazione Iceberg tradizionale sia dell'approccio gestito offerto da S3 Tables.
 
-La tesi è organizzata come segue.
-Il Capitolo 2 introduce lo stato dell'arte relativo alle architetture Data Lake e Lakehouse e descrive le principali tecnologie utilizzate.
-Il Capitolo 3 presenta l'analisi dell'architettura esistente e le principali criticità evidenziate.
-Il Capitolo 4 descrive la progettazione e l'implementazione della nuova soluzione basata su Apache Iceberg.
-Nel Capitolo 5 vengono discussi i risultati sperimentali e i benchmark effettuati. Infine, il Capitolo 6 riporta le conclusioni del lavoro e possibili sviluppi futuri.
+Nei prossimi capitoli, la tesi introdurrà lo stato dell'arte relativo alle architetture Data Lake e Lakehouse, descrivendo le principali tecnologie utilizzate (Capitolo 2).
+Successivamente, verrà presentata un'analisi dettagliata dell'architettura esistente e delle criticità riscontrate (Capitolo 3), 
+seguita dalla progettazione e implementazione della nuova soluzione basata su Apache Iceberg (Capitolo 4).
+Infine, i risultati sperimentali e i benchmark effettuati saranno discussi nel Capitolo 5, 
+raccogliendo conclusioni e possibili sviluppi futuri nel Capitolo 6.
 
 \chapter{Stato dell'arte e tecnologie}
 \label{chap:state-of-the-art}
@@ -104,9 +104,10 @@ Nel Capitolo 5 vengono discussi i risultati sperimentali e i benchmark effettuat
     \item L'evoluzione delle Architetture Dati: Dal Data Warehouse al Data Lake, fino al paradigma Data Lakehouse.
     \item Apache Spark: Architettura e ruolo nell'elaborazione distribuita.
     \item I Table Format Moderni: Analisi comparativa tra Parquet "puro" e Apache Iceberg.
-    \item  Focus su Iceberg: Snapshot, Schema Evolution, Partition Evolution e Time Travel.
+    \item Focus su Iceberg: Snapshot, Schema Evolution, Partition Evolution e Time Travel.
     \item Ecosistema AWS: Panoramica dei servizi utilizzati (S3, Glue Catalog, AWS Glue Jobs, Athena, S3 Tables).
 \end{itemize}
+\section{Evoluzioni delle Architetture Dati}
 
 \chapter{Analisi As-is: Architettura Esistente}
 \label{chap:existing-architecture}
