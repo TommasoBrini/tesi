@@ -100,24 +100,90 @@ raccogliendo conclusioni e possibili sviluppi futuri nel Capitolo 6.
 \chapter{Stato dell'arte e tecnologie}
 \label{chap:state-of-the-art}
 
+\section{Evoluzione delle Architetture Dati}
+L’evoluzione delle architetture dati è strettamente legata alla crescita del volume, della varietà e della velocità con cui le informazioni vengono generate e processate all’interno dei sistemi informativi moderni.
+
+La necessità di estrarre valore da sorgenti dati eterogenee ha guidato l'evoluzione architetturale dai tradizionali database relazionali fino ai moderni ecosistemi distribuiti.
+
+Nel corso degli anni, le piattaforme analitiche hanno attraversato diverse fasi evolutive, passando dai sistemi relazionali tradizionali ai Data Warehouse, successivamente ai Data Lake e, più recentemente, al paradigma Lakehouse.
+
+\subsection{Il Data Warehouse Tradizionale}
+Nel contesto dei tradizionali sistemi di gestione di database relazionali (RDBMS), le piattaforme sono state storicamente suddivise in sistemi per l'\textit{Online Transactional Processing} (OLTP) e sistemi per l'\textit{Online Analytical Processing} (OLAP). 
+I primi sistemi OLAP per la gestione dati per finalità analitiche erano basati su architetture di tipo \textbf{Data Warehouse}. 
+
+Tali sistemi si fondano su schemi relazionali fortemente strutturati e su processi ETL volti a trasformare e normalizzare i dati prima del caricamento.
+
+Questo approccio garantisce elevata affidabilità, proprietà ACID e buone performance per reporting e business intelligence. Inoltre, questi sistemi garantiscono ottime prestazioni di interrogazione grazie all'utilizzo di partizionamenti e indicizzazioni avanzate.
+
+Tuttavia, l'imposizione di formati di dati strettamente strutturati ne limita fortemente la flessibilità rispetto alla gestione di dati eterogenei e workload avanzati di analytics e machine learning.
+I costi di archiviazione su queste piattaforme sono molto elevati, l'infrastruttura risulta rigida di fronte alla necessità di scalare computazionalmente e l'architettura chiusa porta 
+frequentemente al fenomeno del \textit{vendor lock-in}.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=.8\linewidth]{figures/data_warehouse.pdf}
+    \caption{Data Warehouse Architecture. \cite{nixon2024lakehouse}}
+    \label{fig:data-warehouse}
+\end{figure}
+
+\subsection{L'avvento del Data Lake}
+Per superare l'incapacità dei Data Warehouse di gestire dati non strutturati e semi-strutturati e con l'ulteriore aumento delle quantità di dati prodotti da applicazioni web,
+dispositivi mobili e sistemi distribuiti, intorno al 2010 è emerso il concetto di Data Lake, parallelamente alla diffusione delle tecnologie Big Data. 
+
+Questa architettura sfrutta file system distribuiti come HDFS e, più recentemente, sistemi di archiviazione a oggetti in cloud a basso costo (come Amazon S3), permettendo di memorizzare enormi quantità di dati grezzi a costi estremamente contenuti.
+In questo contesto, l'introduzione di formati di file aperti e colonnari, come Apache Parquet e ORC, ha portato notevoli benefici in termini di interoperabilità e prestazioni di interrogazione all'interno del Data Lake.
+
+La differenza principale rispetto al Data Warehouse è quindi la possibilità di memorizzare dati strutturati, semi-strutturati e non strutturati senza la necessità di un processo di trasformazione preventiva, garantendo una maggiore flessibilità e scalabilità.
+
+Nonostante l'enorme flessibilità, i Data Lake tradizionali presentano gravi criticità operative che spesso li trasformano in ecosistemi difficilmente gestibili, noti come \textit{Data Swamp} (paludi di dati). 
+In particolare, l'incapacità di imporre uno schema rigido e l'impossibilità di garantire transazioni ACID espongono il sistema a frequenti rischi di corruzione dei dati in caso di fallimenti dei job di scrittura. 
+Inoltre, l'assenza di un livello transazionale rende l'aggiornamento incrementale dei dati (operazioni di \texttt{UPDATE} o \texttt{DELETE}) estremamente inefficiente, richiedendo spesso la costosa riscrittura di interi file o partizioni.
+Nonostante i vantaggi in termini di costo e capacità di ingestione, i Data Lake tradizionali hanno mostrato importanti limitazioni operative. 
+L’assenza di funzionalità transazionali, la gestione limitata dei metadati e la difficoltà nel supportare operazioni incrementali hanno spesso portato alla creazione di pipeline ETL complesse e difficili da mantenere. Inoltre, molte organizzazioni 
+hanno adottato architetture ibride in cui i dati venivano continuamente replicati tra Data Lake e Data Warehouse, aumentando costi, latenza e complessità gestionale
+
+\begin{figure}
+    \centering
+    \includegraphics[width=.8\linewidth]{figures/data_lake.pdf}
+    \caption{Data Lake Architecture. \cite{data_lake}}
+    \label{fig:data-lake}
+\end{figure}
+
+
+\subsection{Paradigma Data Lakehouse}
+
+Il Data Lakehouse è il concetto architettonico nato per superare i limiti intrinseci di Data Warehouse e Data Lake, offrendo una soluzione dati unificata. 
+Questa nuova architettura riesce a fondere i due mondi, portando la conformità ACID e l'affidabilità dei dati tipiche dei Data Warehouse sopra l'archiviazione a basso costo, scalabile e interoperabile dei Data Lake.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=.8\linewidth]{figures/data_lakehouse.pdf}
+    \caption{Data Lakehouse Architecture. \cite{lakehouse_blog}}
+    \label{fig:data-lakehouse}
+\end{figure}
+
+Un Lakehouse è una piattaforma basata su formati aperti e storage object-based che fornisce supporto nativo per analytics, machine learning e gestione transazionale dei dati. \cite{armbrust2021lakehouse}
+
+Le architetture Lakehouse introducono infatti caratteristiche quali:
+
 \begin{itemize}
-    \item L'evoluzione delle Architetture Dati: Dal Data Warehouse al Data Lake, fino al paradigma Data Lakehouse.
-    \item I Table Format Moderni: Analisi comparativa tra Parquet "puro" e Apache Iceberg.
-    \item Focus su Iceberg: Snapshot, Schema Evolution, Partition Evolution e Time Travel.
-    \item Apache Spark: Architettura e ruolo nell'elaborazione distribuita.
-    \item Ecosistema AWS: Panoramica dei servizi utilizzati (S3, Glue Catalog, AWS Glue Jobs, Athena, S3 Tables).
+    \item proprietà ACID;
+    \item gestione evoluta dei metadati;
+    \item versionamento e time travel;
+    \item supporto a operazioni UPDATE, DELETE e MERGE;
+    \item interoperabilità tra differenti motori di elaborazione.
 \end{itemize}
 
-\section{Evoluzione delle Architetture Dati} Medio
-Contestualizzare data warehouse, data lake e lakehouse.
-Contenuti: (OLTP vs OLAP, separazione compute/storage, nascita dei Data Lake, limiti dei Data Lake tradizionali, nascita del paradigma Lakehouse).
-\subsection{Il Data Warehouse Tradizionale}
-Carattestiche, vantaggi computazionali (proprietà ACID, indici) e limiti (costi elevati di storage, rigidità computazionale, incapacità di gestire dati non strutturati o semi-strutturati).
-\subsection{L'avvento del Data Lake}
-La nascita dello storage a basso costo (HDFS, Amazon S3) e dei formati di file aperti (Apache Parquet). 
-Il problema del "Data Swamp": mancanza di transazioni, corruzione dei dati in caso di fallimenti, inefficienza negli aggiornamenti incrementali.
-\subsection{Paradigma Data Lakehouse}
-Come questa nuova architettura riesca a fondere i due mondi, portando l'affidabilità dei data warehouse sopra lo storage economico dei data lake.
+Tali funzionalità vengono generalmente implementate tramite Open Table Format, come Apache Iceberg, Delta Lake e Apache Hudi, che aggiungono un layer logico di gestione sopra i file presenti nel Data Lake. 
+
+Questo approccio consente di mantenere la flessibilità e il basso costo dello storage object-based, introducendo al contempo meccanismi di consistenza e affidabilità tipici dei sistemi warehouse tradizionali.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=.8\linewidth]{figures/data_architectures.pdf}
+    \caption{Data Architectures. \cite{databricks_lakehouse_blog}}
+    \label{fig:data-architectures}
+\end{figure}
 
 \section{Open File Format e Apache Parquet} Medio
 Cosa sono gli open file format, perché Parquet è diventato uno standard, quali limiti ha.
