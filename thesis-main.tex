@@ -102,12 +102,59 @@ raccogliendo conclusioni e possibili sviluppi futuri nel Capitolo 6.
 
 \begin{itemize}
     \item L'evoluzione delle Architetture Dati: Dal Data Warehouse al Data Lake, fino al paradigma Data Lakehouse.
-    \item Apache Spark: Architettura e ruolo nell'elaborazione distribuita.
     \item I Table Format Moderni: Analisi comparativa tra Parquet "puro" e Apache Iceberg.
     \item Focus su Iceberg: Snapshot, Schema Evolution, Partition Evolution e Time Travel.
+    \item Apache Spark: Architettura e ruolo nell'elaborazione distribuita.
     \item Ecosistema AWS: Panoramica dei servizi utilizzati (S3, Glue Catalog, AWS Glue Jobs, Athena, S3 Tables).
 \end{itemize}
-\section{Evoluzioni delle Architetture Dati}
+
+\section{Evoluzione delle Architetture Dati} Medio
+Contestualizzare data warehouse, data lake e lakehouse.
+Contenuti: (OLTP vs OLAP, separazione compute/storage, nascita dei Data Lake, limiti dei Data Lake tradizionali, nascita del paradigma Lakehouse).
+\subsection{Il Data Warehouse Tradizionale}
+Carattestiche, vantaggi computazionali (proprietà ACID, indici) e limiti (costi elevati di storage, rigidità computazionale, incapacità di gestire dati non strutturati o semi-strutturati).
+\subsection{L'avvento del Data Lake}
+La nascita dello storage a basso costo (HDFS, Amazon S3) e dei formati di file aperti (Apache Parquet). 
+Il problema del "Data Swamp": mancanza di transazioni, corruzione dei dati in caso di fallimenti, inefficienza negli aggiornamenti incrementali.
+\subsection{Paradigma Data Lakehouse}
+Come questa nuova architettura riesca a fondere i due mondi, portando l'affidabilità dei data warehouse sopra lo storage economico dei data lake.
+
+\section{Open File Format e Apache Parquet} Medio
+Cosa sono gli open file format, perché Parquet è diventato uno standard, quali limiti ha.
+Contenuti: row vs column format, compressione, interoperabilità, performance, limiti (assenza ACID, no time travel, update inefficienti).
+
+\section{Apache Spark e l'elaborazione distribuita} Leggero
+Obiettivo: contestualizzare il motore ETL utilizzato.
+Contenuti: architettura Spark, DataFrame API, Spark SQL, distributed processing, ruolo di Spark nei Data Lake/Lakehouse.
+
+\section{Open Table Format e paradigma Lakehouse}
+Obiettivo: introdurre il concetto di table format come evoluzione dei file format, con focus su Apache Iceberg.
+Contenuti: differenza (file format vs table format), metadata layer, ACID, CRUD, time travel, schema evolution.
+
+\section{Apache Iceberg: Architettura e funzionalità}
+\subsection{Architettura dei metadata}
+Descrizione dettagliata del layer di metadata di Iceberg, con focus su Catalog, Metadata File, Manifest List e Manifest File, Snapshot.
+\subsection{Operazioni transazionali e Snapshot}
+ACID, optimistic concurrency control, MERGE, snapshot isolation e idempotenza.
+\subsection{Time Travel e Schema Evolution}
+versionamento, query storiche, evoluzione schema, partition evolution.
+\subsection{Maintanance e ottimizzazione}
+Compaction, snapshot expiration, orphan cleanup, metadata growth.
+\subsection{Confronto con Delta Lake e Hudi}
+Tabella comparativa tra le tre soluzioni, con focus su metadata management, modalità di scrittura (MOR vs COW), interoperabilità, supporto per partition evolution e compatibilità con i principali motori di elaborazione.
+
+\section{Ecosistema AWS}
+\subsubsection{Amazon S3 -> Data Lake Storage}
+le caratteristiche di S3 come object storage.
+\subsubsection{AWS Glue Catalog}
+Il ruolo del catalogo centralizzato per la memorizzazione dei metadati delle tabelle Iceberg
+\subsubsection{AWS Glue Jobs}
+L'utilizzo di Spark in modalità serverless per l'esecuzione delle pipeline ETL.
+\subsubsection{Amazon Athena}
+Gli strumenti per l'interrogazione ad-hoc dei dati.
+\subsubsection{Amazon S3 Tables}
+Nuova soluzione managed di AWS per la gestione di tabelle Iceberg.
+
 
 \chapter{Analisi As-is: Architettura Esistente}
 \label{chap:existing-architecture}
