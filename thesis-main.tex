@@ -260,10 +260,76 @@ Spark si occupa esclusivamente di elaborare i dati e non fornisce nativamente pr
 Per garantire atomicità, consistenza e affidabilità nelle operazioni distribuite, è quindi necessario integrare il motore computazionale con un layer logico avanzato di gestione delle tabelle, rappresentato dagli Open Table Format.
 
 \section{Open Table Format e paradigma Lakehouse}
-Obiettivo: introdurre il concetto di table format come evoluzione dei file format, con focus su Apache Iceberg.
-Contenuti: differenza (file format vs table format), metadata layer, ACID, CRUD, time travel, schema evolution.
+
+Il paradigma Lakehouse trova la sua effettiva realizzabilità tecnica nell'introduzione di un livello software intermedio noto come \textit{Open Table Format}. 
+Questo strato logico si pone l'obiettivo di colmare il divario tra la flessibilità dell'archiviazione di file su object storage e la rigorosa gestione tabellare tipica dei sistemi relazionali tradizionali.
+
+\subsection{Differenza tra File Format e Table Format}
+L'evoluzione delle moderne architetture Data Lake ha evidenziato i limiti dei tradizionali file format nella gestione di workload analitici sempre più complessi.
+Sebbene formati colonnari come Apache Parquet offrano elevate prestazioni, essi definiscono esclusivamente la rappresentazione fisica dei dati all'interno dei file senza introdurre meccanismi avanzati di gestione transazionale o controllo dello stato delle tabelle.
+Di conseguenza, nelle architetture tradizionali basate solo su file format, i motori di interrogazione dovevano scansionare intere directory del file system distributed o dell'object storage per determinare quali file appartenessero a una determinata tabella, causando inefficienze prestazionali e seri problemi di consistenza in caso di modifiche concorrenti.
+
+In questo contesto emergono gli Open Table Format, che risolvono alla radice tale limite spostando la definizione di "verità" della tabella dal percorso fisico della directory a una gestione centralizzata basata sui metadati.
+
+Infatti, tali tecnologie introducono un layer logico di gestione sopra i file presenti nello storage distribuito. A differenza quindi dei semplici file format, un table format non si limita a descrivere come i dati vengono memorizzati, ma definisce anche:
+\begin{itemize}
+    \item la struttura logica della tabella;
+    \item la gestione dei metadati;
+    \item le operazioni transazionali;
+    \item il versionamento dei dati.
+\end{itemize}
+
+Gli Open Table Format rappresentano il fondamento tecnologico del paradigma Lakehouse, architettura nata per combinare la flessibilità e la scalabilità dei Data Lake con le funzionalità tipiche dei Data Warehouse tradizionali. \cite{armbrust2021lakehouse}
+
+\subsection{Il ruolo del Metadata Layer}
+Il nucleo tecnologico di un Open Table Format è il \textit{metadata layer}. 
+Questo strato è costituito da un insieme strutturato di file che tracciano e documentano lo stato e la composizione dei file fisici presenti nello storage (in formato Parquet, ORC o Avro). 
+
+Quando un motore di calcolo interagisce con il sistema, non dialoga direttamente con i file di dati grezzi, ma interroga il metadata layer. 
+Quest'ultimo astrae la complessità dei file fisici e fornisce una vista tabellare coerente, ottimizzando l'accesso e garantendo l'integrità del dato.
+
+\subsection{Funzionalità Chiave dell'Architettura}
+Gli Open Table Format introducono una struttura \textit{metadata-driven} in cui ogni modifica alla tabella genera una nuova versione consistente dello stato dei dati. 
+Questo modello consente di implementare proprietà ACID anche in ambienti distribuiti basati su object storage, garantendo atomicità e isolamento delle operazioni.
+
+Tra le principali funzionalità abilitate dagli Open Table Format vi sono:
+
+\begin{itemize}
+    \item operazioni CRUD transazionali
+    \item supporto a operazioni MERGE incrementali
+    \item snapshot isolation
+    \item partition evolution
+    \item time travel e query storiche
+\end{itemize}
+
+In particolare, il time travel permette di accedere a versioni precedenti della tabella attraverso snapshot consistenti.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=.8\linewidth]{figures/time_travel.pdf}
+    \caption{Time Travel in Open Table Formats. \cite{open_table_format_blog}}
+    \label{fig:time-travel}
+\end{figure}
+
+La schema evolution consente invece di modificare la struttura logica delle tabelle senza richiedere la riscrittura completa dei dataset, migliorando la flessibilità delle pipeline ETL.
+
+Le principali implementazioni Open Table Format diffuse nel panorama Lakehouse sono Apache Iceberg, Delta Lake e Apache Hudi. 
+Sebbene condividano l’obiettivo di introdurre funzionalità transazionali nei Data Lake, tali tecnologie adottano approcci differenti nella gestione dei metadati, delle operazioni incrementali e della compatibilità con i diversi motori di elaborazione.
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=.9\linewidth]{figures/table_format_comparison.pdf}
+    \caption{Open Table Formats Architectures. \cite{dremio}}
+    \label{fig:open-table-formats}
+\end{figure}
+
+Nel contesto di questa tesi, l’attenzione è rivolta principalmente ad Apache Iceberg.
+
+\newpage
 
 \section{Apache Iceberg: Architettura e funzionalità}
+Iceberg rappresenta infatti una delle implementazioni più mature del paradigma Lakehouse, introducendo una struttura gerarchica di metadati e snapshot che consente di separare il layout fisico dei file dalla rappresentazione logica della tabella \cite{IcebergSpec}.
+
 \subsection{Architettura dei metadata}
 Descrizione dettagliata del layer di metadata di Iceberg, con focus su Catalog, Metadata File, Manifest List e Manifest File, Snapshot.
 \subsection{Operazioni transazionali e Snapshot}
