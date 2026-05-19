@@ -130,7 +130,7 @@ frequentemente al fenomeno del \textit{vendor lock-in}.
 Per superare l'incapacità dei Data Warehouse di gestire dati non strutturati e semi-strutturati e con l'ulteriore aumento delle quantità di dati prodotti da applicazioni web,
 dispositivi mobili e sistemi distribuiti, parallelamente alla diffusione delle tecnologie Big Data è emerso il concetto di \textbf{Data Lake}.
 
-Questa architettura sfrutta file system distribuiti come HDFS e, più recentemente, sistemi di archiviazione a oggetti in cloud a basso costo (come Amazon S3), permettendo di memorizzare enormi quantità di dati grezzi a costi estremamente contenuti.
+Questa architettura sfrutta file system distribuiti come \textit{Hadoop HDFS} e, più recentemente, sistemi di archiviazione a oggetti in cloud a basso costo (come Amazon S3), permettendo di memorizzare enormi quantità di dati grezzi a costi estremamente contenuti.
 In questo contesto, l'introduzione di formati di file aperti e colonnari, come Apache Parquet e ORC, ha portato notevoli benefici in termini di interoperabilità e prestazioni di interrogazione all'interno del Data Lake.
 
 La differenza principale rispetto al Data Warehouse è quindi la possibilità di memorizzare dati strutturati, semi-strutturati e non strutturati senza la necessità di un processo di trasformazione preventiva, garantendo una maggiore flessibilità e scalabilità.
@@ -185,9 +185,59 @@ Questo approccio consente di mantenere la flessibilità e il basso costo dello s
 \end{figure}
 
 
-\section{Open File Format e Apache Parquet} Medio
-Cosa sono gli open file format, perché Parquet è diventato uno standard, quali limiti ha.
-Contenuti: row vs column format, compressione, interoperabilità, performance, limiti (assenza ACID, no time travel, update inefficienti).
+\section{Open File Format e Apache Parquet}
+
+La diffusione delle architetture Big Data e dei Data Lake ha favorito l’adozione di \textit{Open File Format} progettati per supportare l’elaborazione distribuita di grandi volumi di dati. 
+L'obiettivo principale di questi open format è garantire l'interoperabilità tra diversi motori di calcolo e piattaforme cloud, evitare costose duplicazioni dei dati, ridurre i costi di archiviazione e ottimizzare le prestazioni di accesso alle informazioni.
+
+All'interno di questo panorama, i formati si dividono principalmente in due categorie: orientati per riga (Row-oriented) e orientati per colonna (Column-oriented). 
+Mentre i formati per riga (come Apache Avro o i tradizionali CSV) sono ideali per i sistemi transazionali tipici dei DBMS, i formati colonnari sono stati introdotti nei sistemi Big Data per massimizzare le performance analitiche. 
+
+\subsection{L'affermazione di Apache Parquet come standard}
+Tra i formati maggiormente diffusi in ambito analitico vi è Apache Parquet, un formato colonnare open-source sviluppato per ottimizzare le performance di lettura e compressione nei workload analitici distribuiti. 
+Parquet è stato progettato per integrarsi con ecosistemi Big Data come Apache Hadoop e Apache Spark, diventando progressivamente uno standard de facto per la memorizzazione di dataset nei Data Lake. \cite{ParquetDocs}
+
+A differenza dei tradizionali formati row-based, nei quali i dati vengono memorizzati riga per riga, Parquet utilizza un’organizzazione column-oriented. 
+In un formato row-based, i valori appartenenti alla stessa riga vengono salvati consecutivamente sul disco, rendendo efficiente l’accesso transazionale ai record completi. 
+Tuttavia, nei workload analitici \textit{OLAP} è spesso necessario leggere solo un sottoinsieme delle colonne disponibili; in tali scenari, l’approccio columnar consente di ridurre significativamente il volume di dati letto da storage e migliorare le performance delle query.
+
+\begin{figure} [h]
+    \centering
+    \includegraphics[width=.8\linewidth]{figures/row_column_format.pdf}
+    \caption{Row-oriented vs Column-oriented storage. \cite{qlik_parquet_blog}}
+    \label{fig:row-vs-column}
+\end{figure}
+\newpage
+L'organizzazione colonnare offre inoltre vantaggi rilevanti in termini di compressione dei dati.
+Poiché i valori appartenenti alla stessa colonna tendono ad avere struttura e distribuzione simili, algoritmi di encoding e compressione risultano più efficaci rispetto ai formati row-based. 
+Questo permette di ridurre i costi di storage e migliorare l’efficienza delle operazioni di scansione.
+
+Inoltre, un ulteriore elemento che ha favorito l'adozione di Parquet è la sua natura open-source e il supporto per un ampio ecosistema di strumenti e piattaforme cloud, garantendo interoperabilità e flessibilità nella gestione dei dati. 
+Infatti, il formato è supportato nativamente da numerosi framework e query engine, tra cui \textbf{Apache Spark}, \textbf{Amazon Athena}, \textbf{Trino}. 
+Tale caratteristica ha reso possibile la costruzione di Data Lake aperti e indipendenti dal motore di elaborazione utilizzato.
+
+\subsection{I limiti di un approccio basato solo su File Format}
+Nonostante questi vantaggi, l’utilizzo di semplici file Parquet presenta alcune limitazioni significative nei moderni workload Lakehouse. 
+Parquet è infatti un file format e non un table format: esso definisce esclusivamente il modo in cui i dati vengono memorizzati all’interno dei file, senza fornire funzionalità avanzate di gestione transazionale o metadata management.
+
+Nello specifico, un Data Lake basato esclusivamente su Parquet non supporta nativamente:
+\begin{itemize}
+    \item \textbf{proprietà ACID} 
+    \item \textbf{operazioni \texttt{UPDATE} e \texttt{DELETE} efficienti} 
+    \item \textbf{gestione transazionale concorrente} 
+    \item \textbf{versionamento dei dati e time travel}
+    \item \textbf{schema evolution avanzata}
+\end{itemize}
+
+Queste limitazioni hanno portato alla nascita degli \textbf{Open Table Format}, tecnologie progettate per estendere le capacità dei file format tradizionali introducendo gestione avanzata dei metadati, snapshot transazionali e supporto a operazioni incrementali.
+Tra le principali soluzioni emerse in questo ambito vi sono Apache Iceberg, Delta Lake e Apache Hudi, che rappresentano il fondamento delle moderne architetture Lakehouse.
+
+\begin{figure} [h]
+    \centering
+    \includegraphics[width=.5\linewidth]{figures/file-format.pdf}
+    \caption{Different File Formats \cite{nelluri2025mastering}}
+    \label{fig:file-vs-table}
+\end{figure}
 
 \section{Apache Spark e l'elaborazione distribuita} Leggero
 Obiettivo: contestualizzare il motore ETL utilizzato.
