@@ -239,9 +239,25 @@ Tra le principali soluzioni emerse in questo ambito vi sono Apache Iceberg, Delt
     \label{fig:file-vs-table}
 \end{figure}
 
-\section{Apache Spark e l'elaborazione distribuita} Leggero
-Obiettivo: contestualizzare il motore ETL utilizzato.
-Contenuti: architettura Spark, DataFrame API, Spark SQL, distributed processing, ruolo di Spark nei Data Lake/Lakehouse.
+\section{Apache Spark e l'elaborazione distribuita}
+La crescente diffusione dei Big Data richiede motori computazionali in grado di scalare orizzontalmente in modo efficiente.
+In questo contesto, Apache Spark rappresenta uno dei principali framework utilizzati nelle moderne architetture Data Lake e Lakehouse grazie alle sue capacità di parallelizzazione, scalabilità e integrazione con differenti sistemi di storage. \cite{SparkDocs}
+
+Apache Spark è un framework open-source per il calcolo distribuito, progettato per garantire elevate prestazioni attraverso l'elaborazione in-memory. 
+Rispetto ai precedenti paradigmi, come il classico modello MapReduce, Spark riduce drasticamente le operazioni di lettura e scrittura su disco, risultando particolarmente adatto a workload analitici e pipeline ETL complesse.
+
+L’architettura di Spark si basa su un modello master-worker.
+Il processo centrale, chiamato Driver, ospita la logica applicativa e coordina l'esecuzione distribuendo i task ai vari Executor eseguiti sui nodi Worker del cluster.
+Questi ultimi elaborano i dati in parallelo sfruttandone la suddivisione in partizioni distribuite, massimizzando l'efficienza computazionale.
+
+L'interazione con il framework avviene tipicamente attraverso API ad alto livello, in particolare DataFrame e Spark SQL. 
+Tali interfacce consentono di manipolare dataset distribuiti in forma tabellare mediante un approccio dichiarativo, simile a quello dei database relazionali tradizionali. 
+
+Grazie alla sua natura distribuita, Spark può integrarsi con differenti sistemi di storage e formati dati, tra cui Apache Parquet, Apache Iceberg e object storage cloud come Amazon S3. 
+Questa interoperabilità ha favorito la sua diffusione come motore principale per processi ETL e workload analitici in ambienti cloud-native.
+
+Spark si occupa esclusivamente di elaborare i dati e non fornisce nativamente proprietà transazionali ACID. 
+Per garantire atomicità, consistenza e affidabilità nelle operazioni distribuite, è quindi necessario integrare il motore computazionale con un layer logico avanzato di gestione delle tabelle, rappresentato dagli Open Table Format.
 
 \section{Open Table Format e paradigma Lakehouse}
 Obiettivo: introdurre il concetto di table format come evoluzione dei file format, con focus su Apache Iceberg.
