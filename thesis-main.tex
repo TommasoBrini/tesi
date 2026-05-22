@@ -7,6 +7,8 @@
 \usepackage{notes}
 \usepackage{shortcuts}
 \usepackage{acronym}
+\usepackage{float}
+\raggedbottom
 
 \school{\unibo}
 \programme{Corso di Laurea Magistrale in Ingegneria e Scienze Informatiche}
@@ -316,33 +318,123 @@ La schema evolution consente invece di modificare la struttura logica delle tabe
 Le principali implementazioni Open Table Format diffuse nel panorama Lakehouse sono Apache Iceberg, Delta Lake e Apache Hudi. 
 Sebbene condividano l’obiettivo di introdurre funzionalità transazionali nei Data Lake, tali tecnologie adottano approcci differenti nella gestione dei metadati, delle operazioni incrementali e della compatibilità con i diversi motori di elaborazione.
 
-\begin{figure}[!htbp]
-    \centering
-    \includegraphics[width=.9\linewidth]{figures/table_format_comparison.pdf}
-    \caption{Open Table Formats Architectures. \cite{dremio}}
-    \label{fig:open-table-formats}
-\end{figure}
-
 Nel contesto di questa tesi, l’attenzione è rivolta principalmente ad Apache Iceberg.
 
 \newpage
 
 \section{Apache Iceberg: Architettura e funzionalità}
-Iceberg rappresenta infatti una delle implementazioni più mature del paradigma Lakehouse, introducendo una struttura gerarchica di metadati e snapshot che consente di separare il layout fisico dei file dalla rappresentazione logica della tabella \cite{IcebergSpec}.
+Apache Iceberg è uno degli Open Table Formats più diffusi, progettato per portare il comportamento, la flessibilità e l'affidabilità tipici del linguaggio SQL all'interno degli ecosistemi Big Data. 
+Ideato originariamente da Netflix per superare i limiti operativi di Apache Hive e successivamente donato alla Apache Software Foundation, 
+Iceberg introduce un layer avanzato di metadata management che consente di implementare transazioni ACID, versionamento dei dati e operazioni incrementali affidabili su object storage cloud-based. \cite{saha2024disruptor}
+
+Le immagini e le tabelle di questo capitolo sono state prese dal tutorial di Iceberg realizzato da Confluent Developer \cite{confluent_iceberg_playlist}.
 
 \subsection{Architettura dei metadata}
-Descrizione dettagliata del layer di metadata di Iceberg, con focus su Catalog, Metadata File, Manifest List e Manifest File, Snapshot.
+L'infrastruttura di Iceberg si discosta dagli altri table format per la sua complessa architettura dei metadati di natura gerarchica e stratificata.
+Iceberg introduce infatti un’architettura \textit{metadata-driven} che separa la rappresentazione logica della tabella dalla disposizione fisica dei file nello storage distribuito,
+consentendo di mantenere snapshot consistenti della tabella e di tracciare tutte le modifiche effettuate nel tempo.
+
+L’architettura di Iceberg si basa su diversi livelli logici, organizzati gerarchicamente:
+
+\begin{itemize}
+    \item \textbf{Catalog}: rappresenta il punto di accesso principale alle tabelle Iceberg e contiene il riferimento al metadata file corrente della tabella. 
+    Iceberg supporta differenti tipologie di catalogo, tra cui Hive Metastore, REST Catalog e AWS Glue Catalog.
+    \begin{figure} [h]
+        \centering
+        \includegraphics[width=.8\linewidth]{figures/iceberg_architecture_2.pdf}
+        \caption{Apache Iceberg Catalog Architecture. \cite{confluent_iceberg_playlist}}
+        \label{fig:catalog-metadata-architecture}
+    \end{figure}
+    \newpage
+    \item \textbf{Metadata File}: è il livello centrale dell'architettura. Si tratta di un file in formato JSON che contiene lo stato completo della tabella, i suoi snapshot storici, lo schema e le specifiche di partizionamento. 
+    \item \textbf{Manifest List}: è un file in formato Avro che contiene un elenco di file manifest e mantiene i valori limite (inferiore e superiore) delle colonne di partizionamento per facilitare il filtraggio durante le query. Ogni snapshot della tabella punta infatti a una manifest list differente, consentendo di ricostruire lo stato esatto della tabella in un determinato momento temporale.
+    \item \textbf{Manifest File}: è il livello più basso dei metadati (in formato Avro) che traccia l'elenco puntuale dei file di dati fisici (come Parquet) in cui risiedono effettivamente le informazioni di una data partizione.
+    \item \textbf{Data File}: i Data File rappresentano i file fisici contenenti i dati veri e propri, generalmente memorizzati in formato Apache Parquet.
+\end{itemize}
+
+\begin{figure} [H]
+    \centering
+    \includegraphics[width=.8\linewidth]{figures/iceberg_architecture_1.pdf}
+    \caption{Apache Iceberg Metadata Architecture. \cite{confluent_iceberg_playlist}}
+    \label{fig:iceberg-metadata-architecture}
+\end{figure}
+
+Questa struttura gerarchica consente a Iceberg di separare completamente il layout fisico dei dati dalla rappresentazione logica della tabella. 
+A differenza delle tradizionali tabelle Hive, nelle quali la struttura delle partizioni dipende direttamente dall’organizzazione delle directory sul filesystem, Iceberg mantiene tutte le informazioni di mapping nei metadati, introducendo maggiore flessibilità e semplificando l’evoluzione della struttura delle tabelle \cite{saha2024disruptor}.
+
+Nel contesto delle pipeline ETL distribuite, questo modello consente di implementare processi più robusti e idempotenti, riducendo la necessità di logiche applicative dedicate alla sincronizzazione dei file e alla gestione manuale dello stato dei dataset.
+Infatti, ogni modifica alla tabella genera un nuovo metadata file, rendendo il commit dell’operazione atomico e versionato. Questo approccio consente di mantenere la consistenza della tabella senza modificare direttamente i file dati esistenti.
+\begin{figure}
+    \centering
+    \includegraphics[width=.8\linewidth]{figures/iceberg_architecture.pdf}
+    \caption{Table's Metadata File Structure. \cite{saha2024disruptor}}
+    \label{fig:metadata-file-structure}
+\end{figure}
+
 \subsection{Operazioni transazionali e Snapshot}
-ACID, optimistic concurrency control, MERGE, snapshot isolation e idempotenza.
+Nei Data Lake tradizionali basati su semplici file Parquet, le modifiche ai dataset vengono generalmente effettuate tramite riscrittura di file o partizioni, senza alcuna garanzia nativa di atomicità e consistenza. 
+Questo approccio può introdurre inconsistenze in caso di scritture concorrenti, errori durante l’esecuzione dei job ETL o riesecuzioni parziali delle pipeline.
+
+Iceberg garantisce l'atomicità delle operazioni (ACID) definendo il concetto di snapshot, ovvero una vista coerente, catturata in un preciso istante, dell'intera tabella inclusi dati e metadati. 
+
+Lo \textbf{snapshot} rappresenta quindi una vista completa e immutabile del dataset in uno specifico istante temporale.
+
+Il sistema permette letture e scritture simultanee attraverso un approccio di Optimistic Concurrency Control (OCC). 
+In questo modello, più processi possono operare contemporaneamente sugli stessi dataset senza utilizzare lock espliciti sui file dati. 
+Al termine dell’operazione, il sistema verifica che il metadata file corrente non sia stato modificato da altri processi concorrenti. 
+In caso contrario, il commit viene rifiutato e l’operazione deve essere rieseguita.
+
+Dal punto di vista operativo, ogni commit in Iceberg produce nuovi data file, nuovi manifest file, una nuova manifest list e un nuovo metadata file.
+Il commit diventa effettivo solamente quando il catalogo aggiorna il riferimento al nuovo metadata file, rendendo atomica la transizione tra lo stato precedente e quello aggiornato della tabella.
+
+Una delle principali conseguenze di questo modello è il supporto nativo a operazioni incrementali avanzate, come INSERT, UPDATE, DELETE e MERGE. 
+In particolare, l’operazione MERGE INTO rappresenta uno degli elementi centrali nelle moderne pipeline ETL incrementali, consentendo di combinare dati nuovi e dati esistenti in maniera transazionale.
+
+
+Le operazioni di aggiornamento introdotte da Iceberg possono essere implementate attraverso differenti modalità di scrittura, progettate per bilanciare efficienza delle letture e costo delle operazioni incrementali. 
+
+In particolare, Apache Iceberg supporta due approcci principali: \textbf{Copy-on-Write (CoW)} e \textbf{Merge-on-Read (MoR)}.
+
+Nel modello Copy-on-Write, le modifiche ai dati comportano la riscrittura completa dei file coinvolti nell’operazione. 
+Quando viene eseguita un'azione di aggiornamento, Iceberg genera nuovi data file contenenti la versione aggiornata dei record e aggiorna successivamente i metadata della tabella tramite un nuovo snapshot. 
+Questo approccio garantisce elevate performance in lettura e una struttura dei dati relativamente semplice, poiché le query accedono direttamente ai file aggiornati senza necessità di elaborazioni aggiuntive.
+
+Nel modello Merge-on-Read, invece, le modifiche vengono registrate tramite file incrementali separati, come delete file o update file, che vengono successivamente combinati in fase di lettura. 
+Questo approccio riduce il costo delle scritture incrementali e risulta particolarmente adatto a workload caratterizzati da aggiornamenti frequenti o streaming continuo. 
+Tuttavia, introduce maggiore complessità nelle operazioni di lettura e rende necessarie attività periodiche di compaction per consolidare i file generati.
+È la scelta preferenziale per sistemi soggetti a piccole e frequenti scritture.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=.8\linewidth]{figures/iceberg_cow_mor.pdf}
+    \caption{Copy-on-Write vs Merge-on-Read. \cite{confluent_iceberg_playlist}}
+    \label{fig:cow-vs-mor}
+\end{figure}
+
 \subsection{Time Travel e Schema Evolution}
-versionamento, query storiche, evoluzione schema, partition evolution.
-\subsection{Maintenance e ottimizzazione}
-Compaction, snapshot expiration, orphan cleanup, metadata growth.
-\subsection{Confronto con Delta Lake e Hudi}
-Tabella comparativa tra le tre soluzioni, con focus su metadata management, modalità di scrittura (MOR vs COW), interoperabilità, supporto per partition evolution e compatibilità con i principali motori di elaborazione.
+Il sofisticato livello dei metadati abilita una serie di funzionalità distintive cruciali per le pipeline ETL:
+\begin{itemize}
+    \item \textbf{Time Travel}: Essendo basato su snapshot immutabili, ogni operazione di modifica genera una nuova versione senza sovrascrivere fisicamente i vecchi dati immediatamente. 
+    Questo permette agli utenti di "viaggiare nel tempo" interrogando lo stato storico dei dati semplicemente specificando un timestamp o l'ID di uno specifico snapshot senza dover duplicare fisicamente i dataset. 
+    Tale approccio risulta particolarmente utile in scenari di auditing, debugging delle pipeline ETL, recupero da errori applicativi o analisi storica delle modifiche.
+    \item \textbf{Schema Evolution}: In Iceberg, le modifiche allo schema (aggiunta, rimozione o ridenominazione di colonne) interessano esclusivamente i file di metadati. 
+    I file Parquet sottostanti rimangono inalterati, permettendo al sistema di evolvere senza il rischio di corrompere l'architettura.  
+    \item \textbf{Partition Evolution}: Iceberg gestisce la logica di partizionamento a livello di metadati tramite una tecnica definita \textit{hidden partitioning}. 
+    Ciò consente di evolvere in modo dinamico gli schemi di partizionamento qualora le prestazioni degradino, senza richiedere agli utenti finali o ai sistemi ETL di alterare la sintassi delle loro query. 
+\end{itemize}
+
+\subsection{Maintenance}
+La continua generazione di snapshot porta, nel tempo, alla frammentazione dei dati e alla proliferazione di file di piccole dimensioni, fattori che possono degradare le prestazioni di ricerca. 
+
+Per risolvere questa problematica, l'architettura richiede processi di manutenzione periodica. In particolare, la gestione dei file di dati e dei metadati prevede attività di compaction e pulizia che consentono di consolidare i file frammentati e rimuovere i vecchi snapshot obsoleti.
+
+Il processo di \textbf{compaction} si occupa di unire in background i file di piccole dimensioni in file più capienti, oltre a riconciliare fisicamente i delete file con i dati originali. 
+
+Tra le operazioni di pulizia implementate da Iceberg, troviamo come lo \textbf{snapshot expiration} e la gestione degli \textbf{orphan files}. La prima si occupa di eliminare definitivamente gli snapshot obsoleti e i relativi file di dati e metadati, liberando spazio e riducendo la complessità, 
+mentre la seconda si occupa di identificare e rimuovere i file di dati non più referenziati da alcuno snapshot, evitando l'accumulo di file storici, mitigando i costi infrastrutturali di storage.
 
 \section{Ecosistema AWS}
-\subsubsection{Amazon S3 -> Data Lake Storage}
+\subsubsection{Amazon S3}
 le caratteristiche di S3 come object storage.
 \subsubsection{AWS Glue Catalog}
 Il ruolo del catalogo centralizzato per la memorizzazione dei metadati delle tabelle Iceberg
