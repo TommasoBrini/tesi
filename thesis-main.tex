@@ -64,6 +64,8 @@ scalabilità e robustezza operativa, evidenziando vantaggi e limiti delle tecnol
 %----------------------------------------------------------------------------------------
 
 Il presente lavoro di tesi è stato sviluppato nell'ambito di un tirocinio svolto presso Prometeia S.p.A., azienda attiva nella consulenza e nello sviluppo di soluzioni software per il settore finanziario.
+\newline
+\newline
 
 Negli ultimi anni la crescita esponenziale dei dati generati da applicazioni distribuite, sistemi transazionali e servizi cloud ha reso necessaria l'evoluzione delle architetture aziendali per la gestione e l'analisi dei dati.
 In questo contesto, i processi di \textbf{Extract, Transform, Load} \textbf{(ETL)} hanno assunto un ruolo centrale nelle pipeline di data engineering, richiedendo soluzioni sempre più scalabili, affidabili e flessibili.
@@ -85,6 +87,7 @@ A differenza di un approccio puramente file-based, Iceberg mantiene lo stato del
 
 Questa tesi si inserisce nel contesto della modernizzazione di una piattaforma ETL aziendale basata su Apache Spark e servizi AWS.
 L'architettura esistente utilizza file Parquet memorizzati su Amazon S3 ed elaborati tramite AWS Glue, presentando criticità legate alla gestione degli aggiornamenti incrementali, alla sincronizzazione del catalogo e alla garanzia di idempotenza dei processi batch.
+Queste limitazioni si traducono operativamente in inefficienze specifiche, formalizzate dall'azienda in alcuni punti critici, che compromettono la robustezza della pipeline e la coerenza del dato nel tempo. 
 
 L'obiettivo del lavoro è progettare e valutare una nuova architettura basata sul paradigma Transactional Lakehouse attraverso l'introduzione di Apache Iceberg.
 In particolare, il lavoro analizza l'integrazione del table format con Apache Spark e l'ecosistema AWS, includendo aspetti relativi alla gestione dei metadati, all'esecuzione di operazioni MERGE transazionali e ai processi di maintenance delle tabelle.
@@ -424,7 +427,8 @@ Il sofisticato livello dei metadati abilita una serie di funzionalità distintiv
 \end{itemize}
 
 \subsection{Maintenance}
-La continua generazione di snapshot porta, nel tempo, alla frammentazione dei dati e alla proliferazione di file di piccole dimensioni, fattori che possono degradare le prestazioni di ricerca. 
+L’introduzione di un layer avanzato di metadata management e di funzionalità transazionali rende necessario implementare specifiche attività di maintenance per garantire efficienza e stabilità nel tempo delle tabelle Apache Iceberg. 
+A differenza dei tradizionali Data Lake basati esclusivamente su file Parquet, infatti, Iceberg mantiene molteplici versioni dei metadata e snapshot storici, generando progressivamente nuovi file ad ogni commit.
 
 Per risolvere questa problematica, l'architettura richiede processi di manutenzione periodica. In particolare, la gestione dei file di dati e dei metadati prevede attività di compaction e pulizia che consentono di consolidare i file frammentati e rimuovere i vecchi snapshot obsoleti.
 
@@ -434,17 +438,37 @@ Tra le operazioni di pulizia implementate da Iceberg, troviamo come lo \textbf{s
 mentre la seconda si occupa di identificare e rimuovere i file di dati non più referenziati da alcuno snapshot, evitando l'accumulo di file storici, mitigando i costi infrastrutturali di storage.
 
 \section{Ecosistema AWS}
-\subsubsection{Amazon S3}
-le caratteristiche di S3 come object storage.
-\subsubsection{AWS Glue Catalog}
-Il ruolo del catalogo centralizzato per la memorizzazione dei metadati delle tabelle Iceberg
-\subsubsection{AWS Glue Jobs}
-L'utilizzo di Spark in modalità serverless per l'esecuzione delle pipeline ETL.
-\subsubsection{Amazon Athena}
-Gli strumenti per l'interrogazione ad-hoc dei dati.
-\subsubsection{Amazon S3 Tables}
-Nuova soluzione managed di AWS per la gestione di tabelle Iceberg.
 
+La diffusione delle architetture Lakehouse è stata favorita anche dall’evoluzione dei servizi cloud, che consentono di realizzare pipeline ETL distribuite sfruttando componenti scalabili e completamente gestiti. 
+In questo contesto, Amazon Web Services (AWS) offre un ecosistema particolarmente adatto alla costruzione di piattaforme analitiche basate su Apache Spark e Open Table Format. \cite{AWSGlueDocs}
+
+\subsubsection{Amazon S3 come Data Lake Storage}
+
+Uno degli elementi centrali dell’architettura è Amazon Simple Storage Service (S3), servizio di \textit{object storage} utilizzato per memorizzare dataset, metadata e file Parquet. 
+Grazie alla sua elevata scalabilità, durabilità e integrazione con i principali motori di elaborazione distribuita, S3 rappresenta uno degli storage più diffusi per implementazioni Data Lake e Lakehouse cloud-native.
+
+\subsubsection{AWS Glue: Catalog e Jobs}
+Per l’elaborazione distribuita dei dati, AWS mette a disposizione \textbf{AWS Glue}, servizio serverless basato su Apache Spark progettato per l’esecuzione di processi ETL. 
+Glue consente di sviluppare job Spark senza la necessità di gestire direttamente infrastrutture cluster dedicate, integrandosi nativamente con servizi AWS come S3, Glue Catalog e Athena.
+
+Per coordinare l'accesso ai dati, il sistema utilizza AWS Glue Data Catalog. 
+In un'architettura Iceberg, questo servizio assume il ruolo fondamentale di \textit{Catalog} di livello superiore. Funge da metastore centralizzato, memorizzando i riferimenti e i puntatori all'ultimo file di metadati valido per ogni tabella, garantendo così l'integrità e l'atomicità delle operazioni concorrenti.
+
+\subsubsection{Amazon Athena}
+
+Amazon Athena è un servizio di interrogazione interattiva serverless che permette di analizzare i dati memorizzati su S3 utilizzando la sintassi SQL standard. 
+Grazie all'integrazione nativa con Apache Iceberg, Athena consente di eseguire query \textit{ad-hoc} e operazioni di \textit{Time Travel} direttamente sulle tabelle del Lakehouse, beneficiando dell'ottimizzazione prestazionale garantita dai metadati.
+
+\subsubsection{Amazon S3 Tables}
+
+Recentemente, AWS ha introdotto Amazon S3 Tables, una soluzione managed progettata specificamente per la gestione di tabelle Apache Iceberg su Amazon S3. 
+A differenza dell'implementazione Iceberg tradizionale appoggiata su AWS Glue Catalog, nella quale le onerose operazioni di maintenance devono essere orchestrate manualmente tramite job Spark dedicati, S3 Tables demanda l'ottimizzazione direttamente al livello di storage. 
+
+La piattaforma automatizza in modo nativo attività critiche come la compaction dei file, la snapshot expiration e la rimozione dei file orfani.
+
+S3 Tables introduce inoltre concetti come namespace e table bucket, semplificando l’organizzazione logica delle tabelle Iceberg e la loro integrazione con i servizi AWS.
+
+Nel contesto di questa tesi, l’ecosistema AWS rappresenta la piattaforma tecnologica utilizzata per progettare e validare la soluzione proposta, integrando Apache Spark, Iceberg e object storage cloud-based all’interno di una pipeline ETL.
 
 \chapter{Analisi As-is: Architettura Esistente}
 \label{chap:existing-architecture}
