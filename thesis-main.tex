@@ -472,6 +472,68 @@ Nel contesto di questa tesi, l’ecosistema AWS rappresenta la piattaforma tecno
 
 \chapter{Analisi As-is: Architettura Esistente}
 \label{chap:existing-architecture}
+L'analisi della situazione attuale deriva da uno studio approfondito dell'architettura della libreria e dalla documentazione tecnica fornita dall'azienda.
+Il seguente capitolo è quindi frutto di questa analisi e si concentra sull'identificazione dei principali pain points e delle inefficienze riscontrate nella pipeline ETL esistente.
+Tutte le tabelle e le immagini di questo capitolo sono state prese dalla documentazione aziendale.
+
+\section{Pipeline giornaliera}
+L'azienda offre una libreria per integrare e elaborare flussi di dati provenienti dalle varie banche e clienti.
+
+La libreria è basata su Apache Spark e si compone di diversi moduli:
+
+\begin{itemize}
+    \item \textbf{Integrazione flussi}: validazione e conversione flussi csv in Parquet
+    \item \textbf{Catalogo prodotti}: generazione del catalogo prodotti finanziari
+    \item \textbf{Clienti}: aggregazione informazioni cliente per PFP
+    \item \textbf{Rendimenti}: calcolo rendimenti periodici dei portafogli.
+\end{itemize}
+
+Il progetto template che utilizza la libreria è infatti strutturato nella seguente maniera:
+
+\begin{figure} [H]
+    \centering
+    \includegraphics[width=.8\linewidth]{figures/progetto-template.pdf}
+    \caption{Struttura del progetto template.}
+    \label{fig:Struttura-progetto-template}
+\end{figure}
+
+Il Main principale (MainData) gestisce il routing verso i runner dei vari moduli, in base al \textit{--runnerMode}.
+
+\begin{figure} [H]
+    \centering
+    \includegraphics[width=.6\linewidth]{figures/mainData.pdf}
+    \caption{Main Data.}
+    \label{fig:Main-Data}
+\end{figure}
+
+Questi moduli vengono orchestrati in una pipeline giornaliera che si occupa di elaborare i flussi di dati provenienti dalle banche, trasformarli in un formato analitico e renderli disponibili per le applicazioni frontend di analisi e reporting. 
+
+La pipeline giornaliera viene orchestrata da AWS Step Functions che esegue sequenzialmente AWS Glue Jobs, corrispondenti ai vari moduli della libreria.
+
+\begin{figure} [H]
+    \centering
+    \includegraphics[width=.8\linewidth]{figures/step_functions.pdf}
+    \caption{Step Function.}
+    \label{fig:Step-Function}
+\end{figure}
+
+\newpage
+\subsection{Moduli della pipeline}
+Come detto, la pipeline giornaliera si compone di diversi moduli eseguiti sequenzialmente, ognuno dei quali si occupa di una specifica fase del processo ETL.
+
+\begin{figure} [H]
+    \centering
+    \includegraphics[width=.8\linewidth]{figures/pipeline_giornaliera.pdf}
+    \caption{Pipeline giornaliera.}
+    \label{fig:Pipeline-giornaliera}
+\end{figure}
+
+In questo progetto, l'attenzione è rivolta principalmente al modulo di integrazione dei flussi, che rappresenta il punto di partenza della pipeline e si occupa di validare e convertire i flussi csv in Parquet.
+
+\section{Flow}
+
+\section{Data}
+
 
 \begin{itemize}
     \item Pipeline ETL esistente: Descrizione del flusso dati basato su Spark e file Parquet.
@@ -497,6 +559,12 @@ Nel contesto di questa tesi, l’ecosistema AWS rappresenta la piattaforma tecno
     \item Risposta ai 6 punti critici
 \end{itemize}
 
+\begin{figure}
+    \centering
+    \includegraphics[width=.8\linewidth]{figures/massive-test.pdf}
+    \caption{Massive test.}
+    \label{fig:massive-test}
+\end{figure}
 
 \chapter{Conclusioni e sviluppi futuri}
 
