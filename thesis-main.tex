@@ -473,19 +473,24 @@ Nel contesto di questa tesi, l’ecosistema AWS rappresenta la piattaforma tecno
 \chapter{Analisi As-is: Architettura Esistente}
 \label{chap:existing-architecture}
 L'analisi della situazione attuale deriva da uno studio approfondito dell'architettura della libreria e dalla documentazione tecnica fornita dall'azienda.
-Il seguente capitolo è quindi frutto di questa analisi e si concentra sull'identificazione dei principali pain points e delle inefficienze riscontrate nella pipeline ETL esistente.
+Il seguente capitolo è quindi frutto di questa analisi e si concentra sull'identificazione dei principali \textit{pain points} e delle inefficienze riscontrate nella pipeline ETL esistente.
 Tutte le tabelle e le immagini di questo capitolo sono state prese dalla documentazione aziendale.
 
 \section{Pipeline giornaliera}
 L'azienda offre una libreria per integrare e elaborare flussi di dati provenienti dalle varie banche e clienti.
 
-La libreria è basata su Apache Spark e si compone di diversi moduli:
+Questa libreria è progettata come un tool per integrare ed elaborare flussi di dati, tipicamente ottenuti sotto forma di file testuali, nell'ambito della realizzazione di un Personal Financial Planner (PFP).
+
+Utilizza tecnologie come Apache Spark e Scala, e si appoggia sui servizi cloud offerti dall'infrastruttura AWS, consentendo agli sviluppatori di evitare di riscrivere procedure appartenenti a pattern largamente diffusi e utilizzati in Prometeia. 
+Offre anche un alto grado di affidabilità e scalabilità rispetto alla quantità e numerosità dei dati processati.
+
+La libreria si compone di diversi moduli che possono essere integrati e modificati a seconda delle esigenze del progetto. I moduli principali sono:
 
 \begin{itemize}
-    \item \textbf{Integrazione flussi}: validazione e conversione flussi csv in Parquet
-    \item \textbf{Catalogo prodotti}: generazione del catalogo prodotti finanziari
-    \item \textbf{Clienti}: aggregazione informazioni cliente per PFP
-    \item \textbf{Rendimenti}: calcolo rendimenti periodici dei portafogli.
+    \item \textbf{Integrazione flussi}: punto di ingresso di una qualsiasi Data Integration PFP Cloud. Nasce con l’obiettivo di processare e validare flussi di dati forniti tendenzialmente da un gestore di dati esterno (cliente) e da un gestore interno (Prometeia)
+    \item \textbf{Catalogo prodotti}: fornisce una procedura per la creazione del catalogo prodotti, utilizzato sia dal PFP che dai moduli batch successivi
+    \item \textbf{Clienti}: Fornisce una procedura per l'aggregazione delle informazioni appartenenti al singolo cliente. Il risultato viene utilizzato sia dal PFP che dagli eventuali moduli batch successivi
+    \item \textbf{Rendimenti}: in questo modulo vengono calcolati massivamente i rendimenti periodici dei clienti appartenenti al perimetro di calcolo
 \end{itemize}
 
 Il progetto template che utilizza la libreria è infatti strutturato nella seguente maniera:
@@ -512,7 +517,7 @@ La pipeline giornaliera viene orchestrata da AWS Step Functions che esegue seque
 
 \begin{figure} [H]
     \centering
-    \includegraphics[width=.8\linewidth]{figures/step_functions.pdf}
+    \includegraphics[width=1\linewidth]{figures/step_functions.pdf}
     \caption{Step Function.}
     \label{fig:Step-Function}
 \end{figure}
@@ -530,10 +535,62 @@ Come detto, la pipeline giornaliera si compone di diversi moduli eseguiti sequen
 
 In questo progetto, l'attenzione è rivolta principalmente al modulo di integrazione dei flussi, che rappresenta il punto di partenza della pipeline e si occupa di validare e convertire i flussi csv in Parquet.
 
-\section{Flow}
+\section{Data Integration}
+Il modulo di Data Integration è il punto di ingresso della pipeline dati. È progettato per processare e validare flussi di dati eterogenei provenienti da sistemi alimentanti esterni e interni, indipendentemente dal volume dei dati trattati.
 
-\section{Data}
+Il processo di ingestione si articola in due step fondamentali:
+\begin{itemize}
+    \item \textbf{FLOW}: Smistamento dei file ricevuti e consolidamento dello stato del giorno precedente \textit{(t-1)}
+    \item \textbf{DATA}: Validazione, trasformazione e conversione dei flussi in formato Parquet, con eventuale merge con lo storico.
+\end{itemize}
 
+L'output di questo modulo consiste in:
+\begin{itemize}
+    \item \textbf{File Parquet validati}, utilizzabili dai moduli successivi della pipeline.
+    \item File Parquet contenenti i \textbf{record scartati}, corredati di metadati sul motivo dello scarto.
+\end{itemize}
+
+\subsection{Flow}
+Lo step FLOW è il primo della pipeline giornaliera. Prepara l’ambiente di lavoro per l’elaborazione del giorno corrente (T) a partire dai risultati del giorno precedente (T-1).
+
+\subsubsection{Operazioni}
+\begin{enumerate}
+    \item \textbf{Smistamento dei file della banca}: i file depositati nella cartella input/ vengono distribuiti nelle sottocartelle import/\{TABLE-NAME\}/, ciascuna corrispondente a una tabella configurata.
+    \item \textbf{Copia file statici}: i file di configurazione e mappatura presenti in DAS/ vengono copiati in import/
+    \item \textbf{Consolidamento t-1}: lo stato prodotto dal batch del giorno precedente viene copiato nelle cartelle di input per il giorno corrente:
+        \newline • output/store/ → input/store/
+        \newline • output/errors/ → input/errors/
+\end{enumerate}
+
+\newpage
+Lo storico del giorno T-1 diventa l'input del giorno T. Gli scarti possono essere recuperati se corretti nel flusso successivo.
+
+\begin{figure} [H]
+    \centering
+    \includegraphics[width=.8\linewidth]{figures/consolidamento.pdf}
+    \caption{Consolidamento dello stato t-1 nello step FLOW}
+    \label{fig:Consolidamento-t-1}
+\end{figure}
+
+\subsubsection{Idempotenza}
+La separazione tra percorsi di input e output garantisce l’idempotenza del processo: rieseguire lo stesso batch produce lo stesso risultato. 
+
+Tuttavia, è fondamentale non rieseguire FLOW se i dati del giorno sono già stati consolidati, poiché sovrascriverebbe lo stato corrente.
+
+\subsubsection{Struttura}
+Dopo l'esecuzione dello step FLOW, la struttura delle cartelle sul bucket è la seguente:
+\begin{figure} [H]
+    \centering
+    \includegraphics[width=.8\linewidth]{figures/struttura-flow.pdf}
+    \caption{Struttura delle cartelle dopo lo step FLOW}
+    \label{fig:Struttura-Flow}
+\end{figure}
+
+\subsection{Data}
+
+\section{Flusso completo}
+
+\section{Pain Points}
 
 \begin{itemize}
     \item Pipeline ETL esistente: Descrizione del flusso dati basato su Spark e file Parquet.
