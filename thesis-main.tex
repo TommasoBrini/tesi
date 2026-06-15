@@ -680,15 +680,209 @@ Verranno anche assegnati i punti di aggancio degli hook personalizzati, che cons
 \label{tab:fasi-workflow}
 \end{table}
 
-\section{Configurazione delle Tabelle}
+\section{Configurazione delle Tabelle e dello storage}
+Per la configurazione delle tabelle è stata consultata la documentazione tecnica fornita dall'azienda, che descrive in dettaglio la struttura dei file di configurazione e le convenzioni adottate per l'organizzazione dei dati su S3.
+
+Ogni tabella è definita da un file JSON che regola il suo intero ciclo di vita nell’ingestione. 
+Il JSON di configurazione consente di definire in modo flessibile e centralizzato tutte le caratteristiche della tabella, tra cui:
+\begin{itemize}
+    \item Identificazione e formato (name, format, bucket, ecc..)
+    \item Percorsi sorgente (source, multipleSources, ecc..)
+    \item Percorsi di output (oStorage, oErrors, oDeltaStorage)
+    \item Percorsi di input per storico e scarti (iStorage, iErrors)
+    \item Schema dei dati (colonne, tipi, ecc..)
+    \item Vincoli e dipendenze (chiavi primarie, chiavi esterne, dipendenze tra tabelle)
+    \item Opzioni aggiuntive (colonne per partizionamento, forzare caching del DataFrame su disco, configurazione export, ecc..)
+\end{itemize}
+
+\newpage
+
+I campi principali sono riassunti nella seguente tabella.
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\textwidth}{>{\ttfamily}l l X}
+\toprule
+\normalfont\textbf{Campo} & \textbf{Tipo} & \textbf{Descrizione} \\
+\midrule
+name           & String        & Nome univoco della tabella \\
+format         & Enum          & Formato sorgente: \texttt{CSV}, \texttt{PARQUET}, \texttt{POSITIONAL} \\
+source         & String        & Percorso del file sorgente (supporta wildcard) \\
+iStorage       & String        & Storico precedente per merge (modalità delta) \\
+oStorage       & String        & Output dati validati \\
+iErrors        & String        & Scarti precedenti per riutilizzo \\
+oErrors        & String        & Output scarti \\
+oDeltaStorage  & String        & Output solo record delta \\
+columns        & List          & Definizione dello schema (nome, tipo, nullable) \\
+primaryKey     & List[String]  & Colonne della chiave primaria \\
+foreignKey     & List          & Vincoli di integrità referenziale \\
+dependencyList & List[String]  & Tabelle da elaborare prima \\
+\bottomrule
+\end{tabularx}
+\caption{Campi principali della configurazione tabella}
+\label{tab:config-tabella}
+\end{table}
+
+Per esempio, la tabella \texttt{movimenti} è configurata dal seguente file JSON.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=.8\linewidth]{figures/configurazione_json.pdf}
+    \caption{Esempio di configurazione tabella.}
+    \label{fig:configurazione-json}
+\end{figure}
+
+\subsection{Storage}
+I dati vengono memorizzati su Amazon S3, organizzati in cartelle che seguono una convenzione basata sui percorsi definiti nella configurazione di ciascuna tabella.
+
+Di norma, dopo l'esecuzione dello step DATA il bucket S3 presenta la struttura mostrata nella seguente figura.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=.8\linewidth]{figures/struttura_bucket.pdf}
+    \caption{Struttura del bucket S3 dopo lo step DATA.}
+    \label{fig:struttura-bucket}
+\end{figure}
+
+Tutti i dati validati e gli scarti sono salvati in formato Apache Parquet, che garantisce
+compressione efficiente, schema tipizzato e lettura colonnare ottimizzata per Spark.
 
 \section{Modalità di alimentazione: Full vs Delta}
+
+La scelta tra modalità Full e Delta dipende da come l'alimentante invia i dati.
+
+Il sistema implementa due modalità di alimentazione distinte, progettate per adattarsi alle diverse caratteristiche dei flussi di dati in ingresso e alle esigenze di aggiornamento dei dataset.
+
+\begin{itemize}
+    \item \textbf{Modalità Full}: l'alimentante invia ogni giorno l'intero dataset.
+    \item \textbf{Modalità Delta}: l'alimentante invia ogni giorno solo i record nuovi o modificati.
+\end{itemize}
+
+\subsection{Modalità Full}
+
+L’alimentante invia ogni giorno l’intero dataset. 
+In questa modalità, non è necessario alcun merge con lo storico: ogni esecuzione produce un output completo e indipendente.
+
+\subsubsection{Caratteristiche}
+\begin{itemize}
+    \item Nessun merge con storico
+    \item Non richiede iStorage
+    \item L’output (oStorage) viene sovrascritto ad ogni esecuzione, ogni giorno.
+    \item Più semplice da gestire, adatta a volumi piccoli/medi
+\end{itemize}
+
+\subsubsection{Configurazione}
+
+\begin{lstlisting}[language=JSON, caption={Esempio di configurazione in modalità Full}, label={lst:config-full}]
+{
+  "name": "CLIENTI",
+  "source": "input/CLIENTI.csv",
+  "oStorage": "output/CLIENTI",
+  "oErrors": "errors/CLIENTI",
+  "primaryKey": ["CODICE_CLIENTE"]
+}
+\end{lstlisting}
+
+\subsubsection{Percorsi Coinvolti}
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\textwidth}{>{\ttfamily}l l X}
+\toprule
+\normalfont\textbf{Percorso} & \textbf{Tipo} & \textbf{Descrizione} \\
+\midrule
+source   & Input  & File giornaliero completo \\
+oStorage & Output & Dati validati (sovrascrive ogni giorno) \\
+oErrors  & Output & Scarti del giorno \\
+\bottomrule
+\end{tabularx}
+\caption{Percorsi coinvolti nella modalità Full}
+\label{tab:percorsi-full}
+\end{table}
+
+\subsection{Modalità Delta}
+L’alimentante invia ogni giorno solo i record nuovi o modificati. 
+
+E' la modalità più delicata da gestire, in quanto richiede il merge con lo storico del giorno precedente e una gestione accurata degli scarti.
+
+\subsubsection{Caratteristiche}
+\begin{itemize}
+    \item Merge con storico \text{t-1}
+    \item Richiede iStorage e oStorage separati
+    \item Supporta riutilizzo scarti
+    \item Ottimale per grandi volumi con poche modifiche giornaliere
+    \item \texttt{iStorage} $\neq$ \texttt{oStorage} e \texttt{iErrors} $\neq$ \texttt{oErrors}
+\end{itemize}
+
+\subsubsection{Configurazione}
+
+\begin{lstlisting}[language=JSON, caption={Esempio di configurazione in modalità Delta}, label={lst:config-delta}]
+{
+  "name": "MOVIMENTI",
+  "source": "import/MOVIMENTI/movimenti.csv",
+  "iStorage": "input/store/MOVIMENTI",
+  "oStorage": "output/full/MOVIMENTI",
+  "iErrors": "input/errors/MOVIMENTI",
+  "oErrors": "output/errors/MOVIMENTI",
+  "oDeltaStorage": "output/delta/MOVIMENTI",
+  "primaryKey": ["CODICEBANCA", "CODICE"]
+}
+\end{lstlisting}
+
+\subsubsection{Percorsi Coinvolti}
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\textwidth}{>{\ttfamily}l l X}
+\toprule
+\normalfont\textbf{Percorso} & \textbf{Tipo} & \textbf{Descrizione} \\
+\midrule
+source        & Input  & File giornaliero (solo nuovi/modificati) \\
+iStorage      & Input  & Storico precedente (t-1) \\
+iErrors       & Input  & Scarti precedenti (per riutilizzo) \\
+oStorage      & Output & Risultato completo (storico + nuovi) \\
+oErrors       & Output & Scarti aggiornati \\
+oDeltaStorage & Output & Solo record nuovi/modificati del giorno \\
+\bottomrule
+\end{tabularx}
+\caption{Percorsi coinvolti nella modalità Delta}
+\label{tab:percorsi-delta}
+\end{table}
+
+\subsection{Architettura Idempotente}
+In modalità Delta, l'idempotenza non può essere garantita nativamente dal merge di file Parquet: riscrivere lo stesso dataset su percorsi condivisi tra esecuzioni consecutive renderebbe indistinguibile uno stato corretto da uno corrotto.
+
+Il meccanismo adottato si basa sulla \textbf{separazione esplicita tra percorsi di input e percorsi di output}: ogni batch legge dallo stato prodotto dal batch precedente (\texttt{iStorage}, \texttt{iErrors}) e scrive su percorsi distinti (\texttt{oStorage}, \texttt{oErrors}). 
+
+Al termine dell'esecuzione, un processo notturno (step FLOW) promuove gli output del giorno a input per il batch successivo, avanzando lo stato in modo controllato.
+
+\begin{lstlisting}[caption={Ciclo di vita tra batch consecutivi in modalità Delta}, label={lst:ciclo-batch}]
+Batch Day T:
+  Read:    iStorage (t-1) + source (delta)
+  Process: validazione, merge
+  Write:   oStorage (t0), oErrors (t0)
+
+AWS Copy (nightly):
+  oStorage (t0) -> iStorage (t0)
+  oErrors  (t0) -> iErrors  (t0)
+
+Batch Day T+1:
+  Read:    iStorage (t0) + source (delta)
+  Process: validazione, merge
+  Write:   oStorage (t1), oErrors (t1)
+\end{lstlisting}
+
+Questo schema offre le seguenti garanzie:
+\begin{itemize}
+    \item \textbf{Idempotenza}: rieseguire il batch del giorno T produce sempre lo stesso \texttt{oStorage (t0)}, poiché gli input \texttt{iStorage (t-1)} e \texttt{source} non vengono modificati dall'esecuzione.
+    \item \textbf{Tracciabilità}: input e output di ogni giorno rimangono distinti e ispezionabili.
+    \item \textbf{Rollback}: in caso di errore è sufficiente non promuovere gli output, mantenendo lo stato precedente come input valido per una riesecuzione.
+    \item \textbf{Testabilità}: è possibile rieseguire batch su ambienti di test senza alterare i dati di produzione.
+\end{itemize}
+
 
 \section{Processo di Merge}
 
 \section{Gestioni degli scarti}
-
-\section{Gestione delle Dipendenze tra Tabelle}
 
 \section{Ciclo di vita tra batch consecutivi}
 

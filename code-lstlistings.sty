@@ -28,6 +28,22 @@
 	frameround=fttt,
 }
 
+\lstdefinelanguage{JSON}{
+	morestring=[b]",
+	stringstyle=\color{magenta},
+	literate=
+		*{:}{{\color{black}{:}}}{1}
+		 {,}{{\color{black}{,}}}{1}
+		 {\{}{{\color{black}{\{}}}{1}
+		 {\}}{{\color{black}{\}}}}{1}
+		 {[}{{\color{black}{[}}}{1}
+		 {]}{{\color{black}{]}}}{1}
+		 {true}{{\color{blue}true}}{4}
+		 {false}{{\color{blue}false}}{5}
+		 {null}{{\color{blue}null}}{4},
+	sensitive=true,
+}
+
 \lstdefinelanguage{Kotlin}{
 	comment=[l]{//},
 	emph={delegate, filter, first, firstOrNull, forEach, lazy, map, mapNotNull, println, return@},
