@@ -1028,11 +1028,77 @@ In sostanza, per ogni tabella in modalità delta:
     \label{fig:flusso-completo}
 \end{figure}
 
-\section{Pain Points}
+\section{Criticità dell’Architettura Corrente}
+L’architettura attuale, basata su file Parquet grezzi e copie fisiche tra cartelle S3, presenta alcune limitazioni strutturali che compromettono la robustezza, la scalabilità e la manutenibilità della pipeline. Di seguito vengono identificati i principali punti critici emersi durante l’analisi del sistema.
+
+\subsection{Problema 1: Copia Fisica dei Dati tra Batch Consecutivi}
+Ad ogni ciclo notturno, lo step FLOW copia fisicamente i file Parquet da \texttt{oStorage} a \texttt{iStorage} e da \texttt{oErrors} a \texttt{iErrors}, propagando lo stato del batch precedente come input per quello successivo.
+Questa operazione introduce le seguenti criticità:
 
 \begin{itemize}
-    \item Pipeline ETL esistente: Descrizione del flusso dati basato su Spark e file Parquet.
-    \item Pain Points: Analisi dettagliata delle inefficienze riscontrate, i 6 punti critici del documento di formazione.
+    \item \textbf{Latenza proporzionale al volume:} il tempo di copia scala linearmente con la dimensione dei dataset, allungando la finestra di elaborazione notturna.
+    \item \textbf{Duplicazione dello storage:} i dati consolidati coesistono sia in \texttt{oStorage} che in \texttt{iStorage}, raddoppiando l'occupazione su S3 senza valore aggiuntivo.
+    \item \textbf{Fragilità operativa:} una copia fallita o incompleta rende il batch successivo inconsistente, richiedendo intervento manuale per il ripristino.
+    \item \textbf{Non idempotenza dello step FLOW:} una riesecuzione accidentale dopo il consolidamento sovrascrive l'input corretto con dati già aggiornati, corrompendo lo stato del sistema.
+\end{itemize}
+
+\subsection{Problema 2: Assenza di Idempotenza Nativa e di Meccanismi di Rollback}
+Come discusso precedentemente, l’architettura attuale garantisce una forma di idempotenza condizionale: rieseguire lo stesso batch \emph{prima} del consolidamento non altera l’input, grazie alla separazione tra \texttt{iStorage} e \texttt{oStorage}. 
+Tuttavia, questa garanzia è fragile per costruzione e non copre tutti gli scenari operativi rilevanti:
+
+\begin{itemize}
+    \item \textbf{Assenza di idempotenza post-consolidamento:} se lo step FLOW viene rieseguito per errore dopo aver promosso \texttt{oStorage} a \texttt{iStorage}, lo stato viene sovrascritto con dati già aggiornati, corrompendo l’input del batch successivo.
+    \item \textbf{Mancanza di rollback nativo:} non esiste un meccanismo integrato per ripristinare uno stato precedente; il recupero richiede interventi manuali tramite backup su S3, con rischi di inconsistenza e tempi di ripristino elevati.
+    \item \textbf{Complessità dell’orchestrazione difensiva:} per prevenire riesecuzioni accidentali, l’orchestratore (AWS Step Functions) deve implementare logiche di guardia esplicite, aumentando la complessità operativa e il rischio di errori di configurazione.
+\end{itemize}
+
+
+\subsection{Problema 3: Aggiornamento Parziale su Record Compositi}
+Nell’architettura corrente, un record finale può essere il risultato della fusione di più file sorgente eterogenei, ciascuno dei quali contribuisce un sottoinsieme di colonne allo schema complessivo della tabella. Questa struttura introduce inefficienze significative nella gestione degli aggiornamenti incrementali:
+
+\begin{itemize}
+    \item \textbf{Ricostruzione integrale del record:} se al giorno T arriva solo un aggiornamento parziale (ad esempio, il solo file dei saldi), il sistema deve comunque ricaricare tutti i file sorgente, ricostruire l’intero record e rieseguire il merge completo, anche per colonne rimaste invariate.
+    \item \textbf{Costo computazionale proporzionale al dataset:} il volume di dati processati è determinato dalla dimensione totale dell’output, non dalla quantità effettiva di dati modificati, rendendo l’elaborazione costosa anche in presenza di delta minimi.
+    \item \textbf{Assenza di aggiornamento colonnare:} la logica di merge opera a livello di record intero basandosi sulla \texttt{primaryKey}; non è possibile aggiornare selettivamente un sottoinsieme di colonne senza rigenerare e riscrivere l’intero record.
+\end{itemize}
+
+
+\subsection{Problema 4: Portabilità tra Ambienti}
+Nell’architettura attuale, i dati sono semplici file Parquet su S3 privi di qualsiasi layer di metadati. Questo rende la migrazione tra ambienti (sviluppo, staging, produzione) banale: è sufficiente copiare i file da un bucket all’altro. Qualsiasi soluzione alternativa deve preservare questa proprietà, che rappresenta un vincolo architetturale rilevante:
+
+\begin{itemize}
+    \item \textbf{Metadati con percorsi assoluti:} l’introduzione di un layer di metadati strutturato (manifest file, manifest list, metadata file) implicherebbe la presenza di riferimenti ai percorsi S3 assoluti dei file di dati; una semplice copia tra bucket non sarebbe più sufficiente, poiché i metadati continuerebbero a puntare al bucket di origine.
+    \item \textbf{Ambienti su account o region distinti:} gli ambienti di sviluppo, staging e produzione possono risiedere su account AWS o region differenti, ciascuno con il proprio catalogo; la promozione dei dati tra ambienti richiederebbe procedure di migrazione dei metadati non banali.
+    \item \textbf{Assenza del problema nell’architettura corrente:} i file Parquet sono autocontenuti e indipendenti dalla loro posizione; non esiste alcun riferimento al percorso fisico all’interno dei dati stessi, rendendo qualsiasi spostamento tra bucket completamente trasparente.
+\end{itemize}
+
+\subsection{Problema 5: Dipendenza dai Glue Crawler per la Sincronizzazione del Catalogo}
+Per rendere i file Parquet su S3 interrogabili tramite Amazon Athena o visibili nel Glue Catalog, l’architettura attuale ricorre a Glue Crawler eseguiti come componente separato dalla pipeline. I crawler analizzano la struttura dei file su S3 e creano o aggiornano le definizioni delle tabelle nel catalogo. Questa dipendenza introduce le seguenti criticità:
+
+\begin{itemize}
+    \item \textbf{Componente esterno e asincrono:} i Glue Crawler operano al di fuori della pipeline DATA e vengono schedulati separatamente; non esiste garanzia che il catalogo sia allineato con i dati al termine di ogni batch.
+    \item \textbf{Riesecuzione manuale a ogni modifica dello schema:} qualsiasi variazione nella struttura dei file Parquet (aggiunta o rimozione di colonne) richiede una riesecuzione esplicita del crawler per propagare le modifiche al catalogo.
+    \item \textbf{Rischio di disallineamento:} se il crawler non viene eseguito dopo una modifica, il catalogo continua a esporre lo schema obsoleto, causando errori nelle query Athena o risultati inconsistenti.
+\end{itemize}
+
+\subsection{Problema 6: Gestione del Compattamento dei File}
+Nell'architettura corrente, ogni batch riscrive interamente l'output (modalità Full) o aggiunge file delta separati (modalità Delta), ma in entrambi i casi i file scritti sono autocontenuti e indipendenti: non esistono file "obsoleti" da gestire. Qualsiasi soluzione basata su operazioni transazionali di merge o update introduce invece un nuovo onere operativo: ogni scrittura aggiunge nuovi file Parquet marcando quelli precedenti come obsoleti nei metadati, senza rimuoverli fisicamente. Con il susseguirsi dei batch giornalieri, questo comportamento genera le seguenti criticità:
+
+\begin{itemize}
+    \item \textbf{Proliferazione di small files:} ogni operazione di merge aggiunge nuovi file senza rimuovere fisicamente quelli sostituiti, causando una frammentazione crescente del dataset su S3.
+    \item \textbf{Degrado delle performance di lettura:} un numero elevato di file piccoli aumenta il numero di richieste a S3 per ogni scan, riduce l'efficienza della lettura colonnare e aumenta l'overhead di pianificazione delle query.
+    \item \textbf{Crescita incontrollata dello storage:} lo spazio occupato su S3 cresce nel tempo anche in assenza di un aumento del volume logico dei dati, poiché i file obsoleti non vengono eliminati automaticamente.
+    \item \textbf{Necessità di un processo di manutenzione dedicato:} a differenza dell'architettura corrente, è necessario introdurre una procedura esplicita di compattamento e pulizia degli snapshot, da orchestrare in modo integrato con la pipeline.
+\end{itemize}
+
+
+\section{Vincoli Trasversali}
+\label{sec:vincoli-trasversali}
+L'analisi delle criticità descritte nelle sezioni precedenti ha evidenziato non solo i limiti dell'architettura corrente, ma anche le proprietà che essa garantisce e che qualsiasi evoluzione deve preservare. Indipendentemente dalle scelte tecnologiche adottate, la nuova soluzione è soggetta a due vincoli fondamentali:
+
+\begin{itemize}
+    \item \textbf{Efficienza computazionale:} il costo di elaborazione deve essere proporzionale al volume delle modifiche effettive, non all'intero dataset. Le operazioni di I/O su S3 devono essere minimizzate, evitando riletture o riscritture non necessarie di dati già consolidati.
+    \item \textbf{Semplicità di sviluppo:} gli sviluppatori devono poter continuare a lavorare con DataFrame Spark e configurazioni JSON dichiarative. La complessità introdotta da un layer transazionale, quali gestione del catalogo, snapshot o strategie di update, deve essere assorbita dal framework e non esposta al codice applicativo dei singoli moduli.
 \end{itemize}
 
 \chapter{Progettazione e Implementazione}
