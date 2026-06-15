@@ -8,6 +8,8 @@
 \usepackage{shortcuts}
 \usepackage{acronym}
 \usepackage{float}
+\usepackage{booktabs}
+\usepackage{tabularx}
 \raggedbottom
 
 \school{\unibo}
@@ -587,6 +589,93 @@ Dopo l'esecuzione dello step FLOW, la struttura delle cartelle sul bucket è la 
 \end{figure}
 
 \subsection{Data}
+Lo step DATA è il cuore del processo di ingestione, eseguito a seguito del completamento dello step FLOW. 
+
+In questo step vengono caricati i file smistati da FLOW, successivamente vengono validati e trasformati, e infine vengono convertiti in formato Parquet.
+
+Come detto, l'output di questo modulo consiste in:
+\begin{itemize}
+    \item Un insieme di file, tipicamente in formato parquet, validati, che possono essere utilizzati come sorgente dati dai moduli successivi.
+    \item un insieme di file, in formato parquet, che contengono i record ritenuti anomali a seconda della configurazione utilizzata.
+\end{itemize}
+
+\subsubsection{Workflow}
+Ogni tabella configurata attraversa 7 fasi sequenziali.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=.8\linewidth]{figures/fasi_workflow.pdf}
+    \caption{Le 7 fasi del workflow}
+    \label{fig:fasi-workflow}
+\end{figure}
+
+Al fine di risolvere conflitti di dipendenze circolari, è stato aggiunta un ultimo step successivo al merge, denominato \textit{Post Execution}.
+In questa fase vengono eseguite operazioni di post-processing e le trasformazioni finali con accesso a tutte le tabelle processate.
+
+L'ordine effettivo di esecuzione delle fasi è quindi il seguente:
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\linewidth]{figures/data_pipeline.pdf}
+    \caption{Workflow completo della pipeline DATA}
+    \label{fig:fasi-workflow-completo}
+\end{figure}
+
+Tra le fasi è possibile inserire trasformazioni personalizzate chiamate \textbf{\textit{Hook}} per modificare i dati.
+
+Gli \textit{hook} sono inseribili nel workflow attraverso codice personalizzato inserito tramite il trait Transformations. 
+I punti di aggancio disponibili sono:
+
+\begin{table}[H]
+\centering
+\begin{tabularx}{\textwidth}{c l X}
+\toprule
+\textbf{Hook} & \textbf{Momento di Esecuzione} \\
+\midrule
+\textbf{BeforeDataValidation} & Prima della validazione dei dati \\[4pt]
+\textbf{AfterColumnsTransformation} & Dopo la trasformazione delle colonne \\[4pt]
+\textbf{AfterColumnsValidation} & Dopo la validazione schema \\[4pt]
+\textbf{AfterDuplicatesRemoval} & Dopo la rimozione dei duplicati \\[4pt]
+\textbf{AfterDiscardedRecordsReuse} & Dopo il recupero degli scarti \\[4pt]
+\textbf{AfterFkConstraintsCheck} & Dopo il controllo delle FK \\[4pt]
+\textbf{AfterMerge} & Dopo il merge con lo storico \\ [4pt]
+\textbf{AfterDataValidation} & Dopo tutte le validazioni \\
+\bottomrule
+\end{tabularx}
+\caption{Hook di trasformazione disponibili}
+\label{tab:fasi-workflow}
+\end{table}
+
+Il workflow data si compone quindi delle sopracitate fasi alternate dall'esecuzione degli hook personalizzati, che consentono di modificare i dati in qualsiasi punto del processo.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=.8\linewidth]{figures/workflow_hook.pdf}
+    \caption{Workflow completo del caricamento dati}
+    \label{fig:fasi-workflow}
+\end{figure}
+
+La tabella seguente riassume le 7 fasi del workflow DATA, evidenziando le operazioni principali eseguite in ciascuna fase e il loro scopo all'interno del processo di ingestione dei dati.
+Verranno anche assegnati i punti di aggancio degli hook personalizzati, che consentono di inserire logiche di trasformazione specifiche in momenti chiave del workflow.
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\textwidth}{c >{\raggedright\arraybackslash}p{3.2cm} X >{\raggedright\arraybackslash}p{4.2cm}}
+\toprule
+\textbf{\#} & \textbf{Fase} & \textbf{Descrizione} & \textbf{Hook} \\
+\midrule
+1 & Load Sources & Caricamento file da S3 o filesystem locale (CSV, Parquet, Positional) & \textit{beforeDataValidation} \\[4pt]
+2 & Data Transformation & Applica trasformazioni alle colonne (fill, constant, pad, take, expr, map) + mascheramento dati sensibili & \textit{afterColumnsTransformation} \\[4pt]
+3 & Schema Validation & Cast automatico ai tipi definiti, controllo campi obbligatori (\texttt{nullable: false}), vincoli di dominio. Record non validi $\to$ scarti & \textit{afterColumnsValidation} \\[4pt]
+4 & Primary Key Check & Rimozione duplicati su \texttt{primaryKey}. Duplicati $\to$ scarti con motivo \texttt{DUPLICATE} & \textit{afterDuplicatesRemoval} \\[4pt]
+5 & Reuse Discards & Recupero scarti riutilizzabili da \texttt{iErrors} (record con \texttt{REUSE=S}). Left anti join con dati correnti & \textit{afterDiscardedRecordsReuse} \\[4pt]
+6 & Foreign Key Check & Verifica integrità referenziale con tabelle padre. Record senza match $\to$ scarti con \texttt{FK\_VIOLATION} & \textit{afterFkConstraintsCheck} \\[4pt]
+7 & Merge & Merge con storico da \texttt{iStorage} (modalità delta). Gestione \texttt{updateOption} e record perpetui & \textit{afterMerge}, \textit{afterDataValidation} \\[4pt]
+8 & Post-Execution & Trasformazioni finali con accesso a tutte le tabelle processate. Usato per risolvere dipendenze circolari & \textit{postExecution} \\
+\bottomrule
+\end{tabularx}
+\caption{Le 8 fasi del pipeline DATA}
+\label{tab:fasi-workflow}
+\end{table}
+
 
 \section{Flusso completo}
 
