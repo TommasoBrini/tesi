@@ -489,7 +489,7 @@ Offre anche un alto grado di affidabilità e scalabilità rispetto alla quantit�
 La libreria si compone di diversi moduli che possono essere integrati e modificati a seconda delle esigenze del progetto. I moduli principali sono:
 
 \begin{itemize}
-    \item \textbf{Integrazione flussi}: punto di ingresso di una qualsiasi Data Integration PFP Cloud. Nasce con l’obiettivo di processare e validare flussi di dati forniti tendenzialmente da un gestore di dati esterno (cliente) e da un gestore interno (Prometeia)
+    \item \textbf{Integrazione flussi}: punto di ingresso di una qualsiasi Data Integration PFP Cloud. Nasce con l’obiettivo di processare e validare flussi di dati provenienti da sistemi alimentanti esterni (tipicamente il cliente) e da sorgenti dati interne
     \item \textbf{Catalogo prodotti}: fornisce una procedura per la creazione del catalogo prodotti, utilizzato sia dal PFP che dai moduli batch successivi
     \item \textbf{Clienti}: Fornisce una procedura per l'aggregazione delle informazioni appartenenti al singolo cliente. Il risultato viene utilizzato sia dal PFP che dagli eventuali moduli batch successivi
     \item \textbf{Rendimenti}: in questo modulo vengono calcolati massivamente i rendimenti periodici dei clienti appartenenti al perimetro di calcolo
@@ -512,6 +512,8 @@ Il Main principale (MainData) gestisce il routing verso i runner dei vari moduli
     \caption{Main Data.}
     \label{fig:Main-Data}
 \end{figure}
+
+Il sistema adotta un pattern di \textbf{dynamic dispatch} basato sulla configurazione dell'ambiente: il parametro \texttt{RunnerMode}, passato a runtime, determina quale implementazione del runner viene istanziata tramite pattern matching, disaccoppiando la logica di orchestrazione dall'implementazione specifica di ciascun modulo.
 
 Questi moduli vengono orchestrati in una pipeline giornaliera che si occupa di elaborare i flussi di dati provenienti dalle banche, trasformarli in un formato analitico e renderli disponibili per le applicazioni frontend di analisi e reporting. 
 
@@ -575,9 +577,11 @@ Lo storico del giorno T-1 diventa l'input del giorno T. Gli scarti possono esser
 \end{figure}
 
 \subsubsection{Idempotenza}
-La separazione tra percorsi di input e output garantisce l’idempotenza del processo: rieseguire lo stesso batch produce lo stesso risultato. 
+La separazione tra percorsi di input e output garantisce una forma di idempotenza \textit{condizionale}: rieseguire lo stesso batch prima del consolidamento produce lo stesso risultato.
 
-Tuttavia, è fondamentale non rieseguire FLOW se i dati del giorno sono già stati consolidati, poiché sovrascriverebbe lo stato corrente.
+Tuttavia, una volta consolidati i dati del giorno, una riesecuzione accidentale di FLOW sovrascriverebbe lo stato corrente in modo irreversibile.
+Questo rivela un limite intrinseco della gestione a file nudi su S3: in assenza di transazionalità, il sistema non dispone di meccanismi nativi per distinguere una prima esecuzione da una riesecuzione tardiva.
+La responsabilità di prevenire tale scenario ricade interamente sull’orchestratore (AWS Step Functions), che deve implementare logiche esplicite di controllo dello stato prima di avviare ogni esecuzione, aumentando la complessità operativa della pipeline.
 
 \subsubsection{Struttura}
 Dopo l'esecuzione dello step FLOW, la struttura delle cartelle sul bucket è la seguente:
@@ -676,8 +680,19 @@ Verranno anche assegnati i punti di aggancio degli hook personalizzati, che cons
 \label{tab:fasi-workflow}
 \end{table}
 
+\section{Configurazione delle Tabelle}
 
-\section{Flusso completo}
+\section{Modalità di alimentazione: Full vs Delta}
+
+\section{Processo di Merge}
+
+\section{Gestioni degli scarti}
+
+\section{Gestione delle Dipendenze tra Tabelle}
+
+\section{Ciclo di vita tra batch consecutivi}
+
+\section{Riepilogo del Flusso completo}
 
 \section{Pain Points}
 
