@@ -951,10 +951,82 @@ presenti nel batch corrente. Questa funzionalità è utile per dati che non devo
 sovrascritti dall’alimentante.
 
 \section{Gestioni degli scarti}
+Gli scarti rappresentano i record che per qualche ragione non superano le fasi di validazione e vengono quindi esclusi dal risultato finale.
+Questi record vengono quindi salvati in file Parquet separati arricchiti di colonne di metadati.
+
+Le colonne aggiuntive di metadati sono le seguenti:
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\textwidth}{>{\ttfamily}l l X}
+\toprule
+\normalfont\textbf{Colonna} & \textbf{Tipo} & \textbf{Descrizione} \\
+\midrule
+DISCARD\_REASON & String    & Motivo dello scarto \\
+REUSE           & String    & Flag di riutilizzo: \texttt{S} (riutilizzabile) o \texttt{N} (non riutilizzabile) \\
+DISCARD\_DATE   & Timestamp & Data e ora dello scarto \\
+\bottomrule
+\end{tabularx}
+\caption{Colonne di metadati aggiunte ai record scartati}
+\label{tab:scarto-metadati}
+\end{table}
+
+Tra i motivi di scarto, possiamo trovare:
+\begin{itemize}
+    \item \textbf{CAST\_ERROR}: errore di conversione del tipo di dato.
+    \item \textbf{REQUIRED\_FIELD\_MISSING}: Campo obbligatorio con valore null.
+    \item \textbf{DUPLICATE}: Violazione della chiave primaria.
+    \item \textbf{FK\_VIOLATION}: violazione della chiave esterna.
+    \item \textbf{DOMAIN\_CONSTRAINT\_VIOLATION}: valore fuori dal dominio ammesso.
+\end{itemize}
+
+\subsubsection{Riutilizzo degli scarti}
+In modalità delta, gli scarti del batch precedente vengono automaticamente recuperati nella fase 5 (Reuse Discards) della pipeline. 
+
+\begin{enumerate}
+    \item \textbf{Batch T:} il record non supera la validazione e viene salvato in \texttt{oErrors}.
+    \item \textbf{AWS Pipeline:} il percorso \texttt{oErrors} viene copiato su \texttt{iErrors} per il batch successivo.
+    \item \textbf{Batch T+1:} la fase \emph{Reuse Discards} carica i record da \texttt{iErrors} e li reimmette nel flusso; se ora validi, vengono consolidati nell'output finale.
+\end{enumerate}
+
+Ad esempio:
+
+\begin{lstlisting}[language={}, caption={Esempio di riutilizzo di uno scarto tra batch consecutivi}]
+Giorno 1:
+  - MOVIMENTI con FK su CLIENTI inesistente
+  - Scartato con FK_VIOLATION, REUSE=S
+
+Giorno 2:
+  - CLIENTI arriva
+  - MOVIMENTI recuperato da iErrors
+  - Validato con successo
+\end{lstlisting}
 
 \section{Ciclo di vita tra batch consecutivi}
+Come detto, il collegamento tra un batch e il successivo è garantito dallo step FLOW, che copia gli output del giorno T-1 nelle cartelle di input del giorno T.
 
-\section{Riepilogo del Flusso completo}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=.8\linewidth]{figures/batch_consecutivi.pdf}
+    \caption{Ciclo di vita dei dati tra batch consecutivi.}
+    \label{fig:batch-consecutivi}
+\end{figure}
+
+In sostanza, per ogni tabella in modalità delta:
+\begin{enumerate}
+    \item Il batch del giorno T-1 produce oStorage e oErrors.
+    \item Lo step FLOW del giorno T copia questi output nelle cartelle di input (iStorage e iErrors) per il batch del giorno T.
+    \item Il batch del giorno T legge lo storico da iStorage, i nuovi dati da source, e gli scarti da iErrors, eseguendo tutte le fasi di validazione e merge.
+    \item Al termine dell'esecuzione, il batch del giorno T produce un nuovo oStorage (dataset completo aggiornato) e oDeltaStorage (solo le variazioni rispetto allo storico), che saranno a loro volta promossi a input per il batch successivo.
+\end{enumerate}
+
+\section{Flusso completo}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=.8\linewidth]{figures/flusso_completo.pdf}
+    \caption{Riepilogo del flusso completo di ingestione dati}
+    \label{fig:flusso-completo}
+\end{figure}
 
 \section{Pain Points}
 
