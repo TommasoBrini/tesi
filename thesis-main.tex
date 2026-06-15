@@ -879,8 +879,76 @@ Questo schema offre le seguenti garanzie:
     \item \textbf{Testabilità}: è possibile rieseguire batch su ambienti di test senza alterare i dati di produzione.
 \end{itemize}
 
+\subsection{Pro e Contro}
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\textwidth}{X X X}
+\toprule
+\textbf{Criterio} & \textbf{Full} & \textbf{Delta} \\
+\midrule
+Alimentante invia      & Tutto ogni giorno & Solo modifiche \\[4pt]
+Volume dati            & Piccolo/medio     & Grande \\[4pt]
+Modifiche giornaliere  & Molte             & Poche \\[4pt]
+Storicizzazione        & Non necessaria    & Necessaria \\[4pt]
+Riutilizzo scarti      & Non supportato    & Supportato \\[4pt]
+Complessità            & Bassa             & Media \\
+\bottomrule
+\end{tabularx}
+\caption{Confronto tra modalità Full e Delta}
+\label{tab:full-vs-delta}
+\end{table}
 
 \section{Processo di Merge}
+Per la modalità Delta, la fase di merge rappresenta il principale step critico della pipeline.
+Come descritto in precedenza, rappresenta l'ultimo step del workflow DATA, precedendo solamente la fase di \textit{Post Execution}. 
+
+Si occupa di combinare i dati validati del giorno corrente con lo storico del giorno precedente, producendo un output completo e aggiornato.
+Opera sulla base della \textbf{primaryKey} configurata nel JSON di configurazione per ogni tabella.
+
+\subsubsection{Logica di Merge}
+Dati due insiemi:
+\begin{itemize}
+    \item il \textbf{batch corrente}, cioè i record nuovi o modificati del giorno corrente, letti da \texttt{source}
+    \item lo \textbf{storico}, cioè i dati validati al giorno t-1, letti da \texttt{iStorage}
+\end{itemize}
+il merge produce il dataset completo secondo queste regole, basate sulla chiave primaria:
+\begin{enumerate}
+    \item \textbf{Record presenti solo nello storico} (chiave non presente nel batch corrente): vengono \textit{mantenuti} nel risultato finale
+    \item \textbf{Record presenti solo nel batch corrente} (chiave non presente nello storico): vengono \textit{inseriti} nel risultato finale
+    \item \textbf{Record presenti in entrambi} (stessa chiave primaria): il record del batch corrente \textit{sovrascrive} quello storico
+\end{enumerate}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=.8\linewidth]{figures/merge.pdf}
+    \caption{Logica di merge tra storico e batch corrente.}
+    \label{fig:merge}
+\end{figure}
+
+\subsubsection{Opzioni di aggiornamento per colonna}
+Nel file JSON di configurazione è possibile configurare il comportamento di merge a livello di singola
+colonna tramite il campo updateOption.
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\textwidth}{>{\ttfamily}l X}
+\toprule
+\normalfont\textbf{Modalità} & \textbf{Comportamento} \\
+\midrule
+ALWAYS    & Il valore del nuovo record sovrascrive sempre lo storico. \\[4pt]
+NEVER     & Il valore storico viene sempre mantenuto; il nuovo viene ignorato. \\[4pt]
+ON\_VALUE & Il nuovo valore sovrascrive lo storico solo se diverso da \texttt{ignoredValue} (es.\ stringa vuota). \\
+\bottomrule
+\end{tabularx}
+\caption{Modalità di aggiornamento colonna durante il merge}
+\label{tab:update-option}
+\end{table}
+
+Un'altra opzione possibile, sempre configurabile a livello di configurazione, è marcare un record come perpetuo.
+Infatti, i record marcati con isPerpetual = true vengono sempre mantenuti dallo storico, anche se
+presenti nel batch corrente. Questa funzionalità è utile per dati che non devono mai essere
+sovrascritti dall’alimentante.
 
 \section{Gestioni degli scarti}
 
