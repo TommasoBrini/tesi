@@ -539,6 +539,7 @@ Come detto, la pipeline giornaliera si compone di diversi moduli eseguiti sequen
 
 In questo progetto, l'attenzione è rivolta principalmente al modulo di integrazione dei flussi, che rappresenta il punto di partenza della pipeline e si occupa di validare e convertire i flussi csv in Parquet.
 
+\newpage
 \section{Data Integration}
 Il modulo di Data Integration è il punto di ingresso della pipeline dati. È progettato per processare e validare flussi di dati eterogenei provenienti da sistemi alimentanti esterni e interni, indipendentemente dal volume dei dati trattati.
 
@@ -561,12 +562,12 @@ Lo step FLOW è il primo della pipeline giornaliera. Prepara l’ambiente di lav
 \begin{enumerate}
     \item \textbf{Smistamento dei file della banca}: i file depositati nella cartella input/ vengono distribuiti nelle sottocartelle import/\{TABLE-NAME\}/, ciascuna corrispondente a una tabella configurata.
     \item \textbf{Copia file statici}: i file di configurazione e mappatura presenti in DAS/ vengono copiati in import/
+    \newpage
     \item \textbf{Consolidamento t-1}: lo stato prodotto dal batch del giorno precedente viene copiato nelle cartelle di input per il giorno corrente:
         \newline • output/store/ → input/store/
         \newline • output/errors/ → input/errors/
 \end{enumerate}
 
-\newpage
 Lo storico del giorno T-1 diventa l'input del giorno T. Gli scarti possono essere recuperati se corretti nel flusso successivo.
 
 \begin{figure} [H]
@@ -583,6 +584,7 @@ Tuttavia, una volta consolidati i dati del giorno, una riesecuzione accidentale 
 Questo rivela un limite intrinseco della gestione a file nudi su S3: in assenza di transazionalità, il sistema non dispone di meccanismi nativi per distinguere una prima esecuzione da una riesecuzione tardiva.
 La responsabilità di prevenire tale scenario ricade interamente sull’orchestratore (AWS Step Functions), che deve implementare logiche esplicite di controllo dello stato prima di avviare ogni esecuzione, aumentando la complessità operativa della pipeline.
 
+\newpage
 \subsubsection{Struttura}
 Dopo l'esecuzione dello step FLOW, la struttura delle cartelle sul bucket è la seguente:
 \begin{figure} [H]
@@ -603,6 +605,7 @@ Come detto, l'output di questo modulo consiste in:
     \item un insieme di file, in formato parquet, che contengono i record ritenuti anomali a seconda della configurazione utilizzata.
 \end{itemize}
 
+\newpage
 \subsubsection{Workflow}
 Ogni tabella configurata attraversa 7 fasi sequenziali.
 
@@ -627,6 +630,7 @@ L'ordine effettivo di esecuzione delle fasi è quindi il seguente:
 Tra le fasi è possibile inserire trasformazioni personalizzate chiamate \textbf{\textit{Hook}} per modificare i dati.
 
 Gli \textit{hook} sono inseribili nel workflow attraverso codice personalizzato inserito tramite il trait Transformations. 
+\newpage
 I punti di aggancio disponibili sono:
 
 \begin{table}[H]
@@ -653,7 +657,7 @@ Il workflow data si compone quindi delle sopracitate fasi alternate dall'esecuzi
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=.8\linewidth]{figures/workflow_hook.pdf}
+    \includegraphics[width=.6\linewidth]{figures/workflow_hook.pdf}
     \caption{Workflow completo del caricamento dati}
     \label{fig:fasi-workflow}
 \end{figure}
@@ -661,18 +665,18 @@ Il workflow data si compone quindi delle sopracitate fasi alternate dall'esecuzi
 La tabella seguente riassume le 7 fasi del workflow DATA, evidenziando le operazioni principali eseguite in ciascuna fase e il loro scopo all'interno del processo di ingestione dei dati.
 Verranno anche assegnati i punti di aggancio degli hook personalizzati, che consentono di inserire logiche di trasformazione specifiche in momenti chiave del workflow.
 \begin{table}[H]
-\centering\small
-\begin{tabularx}{\textwidth}{c >{\raggedright\arraybackslash}p{3.2cm} X >{\raggedright\arraybackslash}p{4.2cm}}
+\centering\footnotesize
+\begin{tabularx}{\textwidth}{c >{\raggedright\arraybackslash}p{2.8cm} X >{\raggedright\arraybackslash}p{3.8cm}}
 \toprule
 \textbf{\#} & \textbf{Fase} & \textbf{Descrizione} & \textbf{Hook} \\
 \midrule
-1 & Load Sources & Caricamento file da S3 o filesystem locale (CSV, Parquet, Positional) & \textit{beforeDataValidation} \\[4pt]
-2 & Data Transformation & Applica trasformazioni alle colonne (fill, constant, pad, take, expr, map) + mascheramento dati sensibili & \textit{afterColumnsTransformation} \\[4pt]
-3 & Schema Validation & Cast automatico ai tipi definiti, controllo campi obbligatori (\texttt{nullable: false}), vincoli di dominio. Record non validi $\to$ scarti & \textit{afterColumnsValidation} \\[4pt]
-4 & Primary Key Check & Rimozione duplicati su \texttt{primaryKey}. Duplicati $\to$ scarti con motivo \texttt{DUPLICATE} & \textit{afterDuplicatesRemoval} \\[4pt]
-5 & Reuse Discards & Recupero scarti riutilizzabili da \texttt{iErrors} (record con \texttt{REUSE=S}). Left anti join con dati correnti & \textit{afterDiscardedRecordsReuse} \\[4pt]
-6 & Foreign Key Check & Verifica integrità referenziale con tabelle padre. Record senza match $\to$ scarti con \texttt{FK\_VIOLATION} & \textit{afterFkConstraintsCheck} \\[4pt]
-7 & Merge & Merge con storico da \texttt{iStorage} (modalità delta). Gestione \texttt{updateOption} e record perpetui & \textit{afterMerge}, \textit{afterDataValidation} \\[4pt]
+1 & Load Sources & Caricamento file da S3 o filesystem locale (CSV, Parquet, Positional) & \textit{beforeDataValidation} \\
+2 & Data Transformation & Applica trasformazioni alle colonne (fill, constant, pad, take, expr, map) + mascheramento dati sensibili & \textit{afterColumnsTransformation} \\
+3 & Schema Validation & Cast automatico ai tipi definiti, controllo campi obbligatori (\texttt{nullable: false}), vincoli di dominio. Record non validi $\to$ scarti & \textit{afterColumnsValidation} \\
+4 & Primary Key Check & Rimozione duplicati su \texttt{primaryKey}. Duplicati $\to$ scarti con motivo \texttt{DUPLICATE} & \textit{afterDuplicatesRemoval} \\
+5 & Reuse Discards & Recupero scarti riutilizzabili da \texttt{iErrors} (record con \texttt{REUSE=S}). Left anti join con dati correnti & \textit{afterDiscardedRecordsReuse} \\
+6 & Foreign Key Check & Verifica integrità referenziale con tabelle padre. Record senza match $\to$ scarti con \texttt{FK\_VIOLATION} & \textit{afterFkConstraintsCheck} \\
+7 & Merge & Merge con storico da \texttt{iStorage} (modalità delta). Gestione \texttt{updateOption} e record perpetui & \textit{afterMerge}, \textit{afterDataValidation} \\
 8 & Post-Execution & Trasformazioni finali con accesso a tutte le tabelle processate. Usato per risolvere dipendenze circolari & \textit{postExecution} \\
 \bottomrule
 \end{tabularx}
@@ -746,6 +750,7 @@ Di norma, dopo l'esecuzione dello step DATA il bucket S3 presenta la struttura m
 Tutti i dati validati e gli scarti sono salvati in formato Apache Parquet, che garantisce
 compressione efficiente, schema tipizzato e lettura colonnare ottimizzata per Spark.
 
+\newpage
 \section{Modalità di alimentazione: Full vs Delta}
 
 La scelta tra modalità Full e Delta dipende da come l'alimentante invia i dati.
@@ -813,6 +818,7 @@ E' la modalità più delicata da gestire, in quanto richiede il merge con lo sto
     \item \texttt{iStorage} $\neq$ \texttt{oStorage} e \texttt{iErrors} $\neq$ \texttt{oErrors}
 \end{itemize}
 
+\newpage
 \subsubsection{Configurazione}
 
 \begin{lstlisting}[language=JSON, caption={Esempio di configurazione in modalità Delta}, label={lst:config-delta}]
@@ -945,6 +951,7 @@ ON\_VALUE & Il nuovo valore sovrascrive lo storico solo se diverso da \texttt{ig
 \label{tab:update-option}
 \end{table}
 
+\newpage
 Un'altra opzione possibile, sempre configurabile a livello di configurazione, è marcare un record come perpetuo.
 Infatti, i record marcati con isPerpetual = true vengono sempre mantenuti dallo storico, anche se
 presenti nel batch corrente. Questa funzionalità è utile per dati che non devono mai essere
