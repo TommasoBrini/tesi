@@ -1213,10 +1213,9 @@ Il risultato è un catalogo sempre allineato con lo stato effettivo dei dati, se
 \label{fig:crawler-vs-iceberg}
 \end{figure}
 
-
 \section{Progettazione della nuova pipeline ETL}
-% Breve intro: Spieghiamo che l'adozione di Iceberg ha permesso di snellire 
-% il flusso e rivedere l'implementazione dei job Spark.
+L'adozione di Apache Iceberg ha reso possibile una revisione profonda del flusso di elaborazione, eliminando alcune delle ridondanze strutturali dell'architettura precedente e consentendo di semplificare sia il ciclo di vita del dato tra batch consecutivi, sia la configurazione dichiarativa delle tabelle, sia la logica applicativa dei job Spark.
+Le sezioni seguenti descrivono le scelte progettuali e implementative adottate, in risposta diretta alle criticità identificate nei capitoli precedenti.
 
 \subsection{Il nuovo ciclo di vita del dato (Eliminazione di FLOW)}
 % Architettura: Diagramma Prima/Dopo del ciclo di vita.
