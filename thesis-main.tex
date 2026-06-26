@@ -1097,7 +1097,6 @@ Nell'architettura corrente, ogni batch riscrive interamente l'output (modalità 
     \item \textbf{Necessità di un processo di manutenzione dedicato:} a differenza dell'architettura corrente, è necessario introdurre una procedura esplicita di compattamento e pulizia degli snapshot, da orchestrare in modo integrato con la pipeline.
 \end{itemize}
 
-
 \section{Vincoli Trasversali}
 \label{sec:vincoli-trasversali}
 L'analisi delle criticità descritte nelle sezioni precedenti ha evidenziato non solo i limiti dell'architettura corrente, ma anche le proprietà che essa garantisce e che qualsiasi evoluzione deve preservare. Indipendentemente dalle scelte tecnologiche adottate, la nuova soluzione è soggetta a due vincoli fondamentali:
@@ -1109,6 +1108,74 @@ L'analisi delle criticità descritte nelle sezioni precedenti ha evidenziato non
 
 \chapter{Progettazione e Implementazione}
 \label{chap:design-and-implementation}
+
+\section{Requisiti progettuali}
+L'analisi dell'architettura attuale ha fatto emergere come il sistema attuale, pur garantendo affidabilità operativa e soddisfacendo i requisiti funzionali dell'azienda,
+risulti limitato dall'utilizzo di tabelle Parquet prive di funzionalità transazionali native.
+Le soluzioni adottate per garantire proprietà quali idempotenza, rollback e gestione dello stato del dato richiedono infatti meccanismi aggiuntivi, introducendo complessità e overhead operativo.
+
+Al fine di modernizzare la piattaforma e superare tali criticità, 
+la progettazione del nuovo sistema è stata guidata dalla necessità di soddisfare i seguenti requisiti fondamentali, 
+direttamente derivati dai problemi precedentemente formalizzati:
+
+\begin{itemize}
+    \item \textbf{Eliminazione della duplicazione dello storage}: il batch deve poter leggere lo stato aggiornato del dataset senza che sia necessaria una copia fisica notturna da \texttt{oStorage} a \texttt{iStorage}.
+    \item \textbf{Idempotenza e transazionalità native}: un fallimento durante la scrittura non deve corrompere i dati storici; il rollback a uno snapshot precedente deve avvenire a livello di metadati, senza ripristini manuali.
+    \item \textbf{Aggiornamenti granulari}: in presenza di record compositi, un aggiornamento parziale deve modificare solo le colonne coinvolte, senza riscrivere l'intero record.
+    \item \textbf{Portabilità dei metadati}: l'introduzione di un livello di metadati non deve ostacolare la migrazione dei dataset tra i diversi ambienti aziendali (sviluppo, staging, produzione).
+    \item \textbf{Gestione automatica del catalogo}: la sincronizzazione tra dati e Glue Catalog deve avvenire automaticamente al termine di ogni job, eliminando la dipendenza dai Glue Crawler.
+    \item \textbf{Maintenance automatizzata}: compaction dei small file e scadenza degli snapshot obsoleti devono essere orchestrati dalla piattaforma, senza interventi manuali.
+\end{itemize}
+
+\begin{table}[H]
+\centering\small
+\begin{tabularx}{\textwidth}{X X}
+\toprule
+\textbf{Criticità} & \textbf{Requisito progettuale} \\
+\midrule
+Duplice storage \texttt{iStorage}/\texttt{oStorage} & Eliminazione della duplicazione dello storage \\[4pt]
+Step FLOW                   & Eliminazione del consolidamento \\[4pt]
+Crawler                     & Gestione automatica del catalogo \\[4pt]
+Assenza ACID                & Transazionalità nativa \\[4pt]
+Record compositi            & Aggiornamenti granulari \\[4pt]
+Metadata distribuiti        & Portabilità dei metadati \\[4pt]
+Maintenance manuale         & Automazione della maintenance \\
+\bottomrule
+\end{tabularx}
+\caption{Mappatura tra criticità dell'architettura corrente e requisiti progettuali}
+\label{tab:criticita-requisiti}
+\end{table}
+
+\section{Scelta Tecnologica e Architetturale}
+adottare Transactional Lakehouse e Iceberg
+**Focus sull'integrazione nativa con AWS Glue Catalog (risolve il problema dei crawler)**
+
+
+\section{Architettura proposta}
+Eliminazione dello step FLOW
+
+Il nuovo ciclo di vita del dato: Diagramma del nuovo flusso
+
+Il nuovo json di configurazione
+
+\section{Implementazione}
+\subsection{Gestione dello stato e dell'idempotenza}
+spiegare il cursor watermark che ho usato per garantire idempotenza e rollback
+
+**\subsection{Il nuovo processo di Merge (MERGE INTO)}**
+% **Come la logica custom viene sostituita dalle transazioni native**
+
+\subsection{Gestione dei record compositi}
+
+\section{Amazon S3 Tables e Automazione della Maintenance}
+% Introduzione a S3 Tables.
+% Spiegare che è stato adottato proprio per delegare al livello storage 
+% la compaction, snapshot expiration e orphan files removal,
+% evitando di implementare job custom (risolve Problema 6).
+
+\section{Migrazione dei metadata}
+script per spostare dati tra ambienti diversi
+
 
 \begin{itemize}
     \item Design della soluzione (To-Be): Come cambia l'architettura logica.
