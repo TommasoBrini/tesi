@@ -10,6 +10,8 @@
 \usepackage{float}
 \usepackage{booktabs}
 \usepackage{tabularx}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta}
 \raggedbottom
 
 \school{\unibo}
@@ -1146,26 +1148,94 @@ Maintenance manuale         & Automazione della maintenance \\
 \label{tab:criticita-requisiti}
 \end{table}
 
+\newpage
 \section{Scelta Tecnologica e Architetturale}
-adottare Transactional Lakehouse e Iceberg
-**Focus sull'integrazione nativa con AWS Glue Catalog (risolve il problema dei crawler)**
+
+La scelta architetturale centrale consiste nell'introduzione di \textbf{Apache Iceberg} come Open Table Format, interposto tra il livello di elaborazione (Apache Spark su AWS Glue) e il livello di storage (Amazon S3). Iceberg aggiunge un layer di metadati versionati sopra i file Parquet esistenti, abilitando transazionalità ACID, snapshot isolation e gestione evoluta dello schema senza modificare il formato fisico dei dati.
+
+Rispetto ad alternative concorrenti come Delta Lake e Apache Hudi, Iceberg è stato preferito per tre ragioni principali: la natura completamente open-source della specifica, l'astrazione pulita del layer dei metadati indipendente dal motore di calcolo, e l'integrazione nativa con l'ecosistema AWS, incluso il Glue Catalog e le Amazon S3 Tables \cite{S3TablesDocs}, che adottano Iceberg come formato di riferimento.
+
+L'adozione di Iceberg preserva i due pilastri infrastrutturali esistenti:
+
+\begin{itemize}
+    \item \textbf{Amazon S3} continua a ospitare i dati in formato Parquet, affiancati dall'albero dei metadati Iceberg (metadata file, manifest list, manifest file).
+    \item \textbf{Apache Spark} (tramite AWS Glue Jobs) rimane il motore di calcolo distribuito per la logica di Data Integration.
+\end{itemize}
+
+\subsubsection{Eliminazione dei Glue Crawler}
+Nell'architettura precedente la visibilità delle tabelle su Amazon Athena era demandata ai Glue Crawler, processi asincroni ed esterni alla pipeline che ricostruivano il catalogo analizzando periodicamente il contenuto di S3.
+
+Iceberg elimina questa dipendenza grazie all'integrazione nativa con AWS Glue Catalog: al termine di ogni operazione di scrittura o MERGE, il framework esegue un commit atomico verso le API del catalogo, aggiornando il puntatore al nuovo \texttt{metadata.json}. Se il commit va a buon fine, dati e schema sono immediatamente visibili a tutti i client a valle; se fallisce, il catalogo resta invariato e l'operazione viene interamente annullata.
+
+Il risultato è un catalogo sempre allineato con lo stato effettivo dei dati, senza fasi di orchestrazione aggiuntive né rischi di disallineamento tra schema e storage.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    node distance=0.55cm and 3.5cm,
+    box/.style={rectangle, rounded corners=5pt, draw=black, thick,
+                minimum width=3.2cm, minimum height=0.65cm,
+                align=center, font=\small\ttfamily},
+    extbox/.style={rectangle, rounded corners=5pt, draw=gray, thick, dashed,
+                   minimum width=3.2cm, minimum height=0.65cm,
+                   align=center, font=\small\ttfamily, text=gray},
+    arr/.style={-{Stealth[length=6pt]}, thick},
+    extarr/.style={-{Stealth[length=6pt]}, thick, dashed, gray},
+    head/.style={font=\bfseries\normalsize}
+]
+
+%--- Prima (colonna sinistra) ---
+\node[head] (la) {Prima};
+\node[box,  below=0.5cm of la]  (a1) {Spark};
+\node[box,  below=0.55cm of a1] (a2) {Write Parquet};
+\node[box,  below=0.55cm of a2] (a3) {Amazon S3};
+\node[extbox, below=0.55cm of a3] (a4) {Glue Crawler};
+\node[box,  below=0.55cm of a4] (a5) {Glue Catalog};
+
+\draw[arr]    (a1) -- (a2);
+\draw[arr]    (a2) -- (a3);
+\draw[extarr] (a3) -- (a4) node[midway, right, font=\scriptsize\itshape, gray] {asincrono};
+\draw[extarr] (a4) -- (a5);
+
+%--- Dopo (colonna destra) ---
+\node[head, right=3.5cm of la] (lb) {Dopo};
+\node[box,  below=0.5cm of lb]  (b1) {Spark};
+\node[box,  below=0.55cm of b1] (b2) {Commit Iceberg};
+\node[box,  below=0.55cm of b2] (b3) {Amazon S3 + Metadata};
+\node[box,  below=0.55cm of b3] (b4) {Glue Catalog};
+
+\draw[arr] (b1) -- (b2);
+\draw[arr] (b2) -- (b3);
+\draw[arr] (b3) -- (b4) node[midway, right, font=\scriptsize\itshape] {atomico};
+
+\end{tikzpicture}
+\caption{Gestione del catalogo: confronto tra architettura precedente (con Glue Crawler) e nuova (con Iceberg)}
+\label{fig:crawler-vs-iceberg}
+\end{figure}
 
 
-\section{Architettura proposta}
-Eliminazione dello step FLOW
+\section{Progettazione della nuova pipeline ETL}
+% Breve intro: Spieghiamo che l'adozione di Iceberg ha permesso di snellire 
+% il flusso e rivedere l'implementazione dei job Spark.
 
-Il nuovo ciclo di vita del dato: Diagramma del nuovo flusso
+\subsection{Il nuovo ciclo di vita del dato (Eliminazione di FLOW)}
+% Architettura: Diagramma Prima/Dopo del ciclo di vita.
+% Spiegazione: L'unificazione di iStorage e oStorage, la fine delle copie fisiche.
 
-Il nuovo json di configurazione
+\subsection{Gestione dello Stato e Idempotenza (Cursor Watermark)}
+% Implementazione: Visto che non copiamo più i file, come capiamo dove eravamo 
+% rimasti? Spiegazione del cursor watermark (risolve Problema 2).
 
-\section{Implementazione}
-\subsection{Gestione dello stato e dell'idempotenza}
-spiegare il cursor watermark che ho usato per garantire idempotenza e rollback
+\subsection{Evoluzione della Configurazione Dichiarativa}
+% Implementazione: Come si è snellito il file JSON (es. via oDeltaStorage e iErrors).
 
-**\subsection{Il nuovo processo di Merge (MERGE INTO)}**
-% **Come la logica custom viene sostituita dalle transazioni native**
+\subsection{Transazioni Native: Il nuovo processo di Merge}
+% Implementazione: Come la vecchia logica in Scala/Spark viene sostituita 
+% dal comando nativo MERGE INTO di Iceberg.
 
-\subsection{Gestione dei record compositi}
+\subsection{Ottimizzazione degli Aggiornamenti sui Record Compositi}
+% Implementazione: Aggiornamenti selettivi delle singole colonne (risolve Problema 3).
+
 
 \section{Amazon S3 Tables e Automazione della Maintenance}
 % Introduzione a S3 Tables.
