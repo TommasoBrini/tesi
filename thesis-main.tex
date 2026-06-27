@@ -1307,7 +1307,29 @@ Nelle esecuzioni successive, il cursor viene letto prima di qualsiasi operazione
 A supporto dello sviluppo, il framework espone una \textbf{modalità \texttt{--dev-mode}}: il cursor non viene aggiornato a fine batch e, prima di ogni riesecuzione, le tabelle vengono automaticamente riportate allo snapshot consolidato di \textit{t-1} tramite la procedura nativa di Iceberg \texttt{rollback\_to\_timestamp(...)}.
 Lo sviluppatore può così eseguire il batch quante volte vuole, cambiando parametri, configurazioni o trasformazioni, ripartendo sempre dallo stesso stato di partenza, senza alcun intervento manuale sulle tabelle.
 
+\newpage
+\subsection{Evoluzione della Configurazione}
+\label{sec:config-dichiarativa}
 
+Ogni tabella del framework è descritta da un file JSON che ne specifica sorgente, schema, chiavi e comportamento di merge. Come mostrato nel Listing~\ref{lst:config-delta}, la configurazione in modalità delta richiedeva cinque percorsi S3 distinti: lo storico di input (\texttt{iStorage}, \texttt{iErrors}), la destinazione di output (\texttt{oStorage}, \texttt{oErrors}) e il delta giornaliero (\texttt{oDeltaStorage}). Questi percorsi erano espressi come path assoluti, rendendo la configurazione dipendente dall'ambiente di esecuzione.
+
+Con Iceberg, la gestione dello stato storico è delegata al formato stesso: il cursor watermark sa da quale snapshot leggere, e il catalogo Glue conosce la posizione fisica della tabella. I soli campi specifici per Iceberg da aggiungere alla configurazione esistente sono \texttt{storageFormat} e \texttt{writeMode}; tutto il resto — schema, chiavi, trasformazioni — rimane invariato:
+
+\begin{lstlisting}[language=JSON, caption={Configurazione tabella in modalità Iceberg Delta}, label={lst:config-iceberg}]
+{
+  "name": "MOVIMENTI",
+  "source": "import/MOVIMENTI/movimenti.csv",
+  "storageFormat": "ICEBERG",
+  "writeMode": "delta",
+  "primaryKey": ["CODICEBANCA", "CODICE"]
+  // "columns", "foreignKey", ... rimangono invariati
+}
+\end{lstlisting}
+
+Il campo \texttt{source} rimane invariato, in quanto descrive la sorgente esterna indipendentemente dal formato di storage. 
+Ciò che scompare sono i cinque percorsi S3 che descrivevano lo stato interno della pipeline: \texttt{iStorage}, \texttt{oStorage}, \texttt{iErrors}, \texttt{oErrors} e \texttt{oDeltaStorage}. 
+Il campo \texttt{storageFormat} attiva il percorso Iceberg all'interno del framework; \texttt{writeMode} distingue tra scrittura completa (\texttt{full}) e incrementale (\texttt{delta}). 
+I percorsi fisici su S3 sono derivati automaticamente dal warehouse Iceberg configurato a livello di ambiente, eliminando la dipendenza da path assoluti nella configurazione della singola tabella.
 
 \section{Amazon S3 Tables e Automazione della Maintenance}
 % Introduzione a S3 Tables.
@@ -1317,6 +1339,8 @@ Lo sviluppatore può così eseguire il batch quante volte vuole, cambiando param
 
 \section{Migrazione dei metadata}
 script per spostare dati tra ambienti diversi
+
+\section{Gestione dei record compositi}
 
 
 \begin{itemize}
