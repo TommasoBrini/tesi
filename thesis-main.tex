@@ -1331,13 +1331,50 @@ Ciò che scompare sono i cinque percorsi S3 che descrivevano lo stato interno de
 Il campo \texttt{storageFormat} attiva il percorso Iceberg all'interno del framework; \texttt{writeMode} distingue tra scrittura completa (\texttt{full}) e incrementale (\texttt{delta}). 
 I percorsi fisici su S3 sono derivati automaticamente dal warehouse Iceberg configurato a livello di ambiente, eliminando la dipendenza da path assoluti nella configurazione della singola tabella.
 
-\section{Amazon S3 Tables e Automazione della Maintenance}
-% Introduzione a S3 Tables.
-% Spiegare che è stato adottato proprio per delegare al livello storage 
-% la compaction, snapshot expiration e orphan files removal,
-% evitando di implementare job custom (risolve Problema 6).
+\newpage
+\section{Amazon S3 Tables}
+\label{sec:s3-tables}
 
-\section{Migrazione dei metadata}
+L'adozione di Iceberg e delle operazioni di \texttt{MERGE INTO} introduce il fenomeno dei \emph{small files}: 
+ogni transazione genera nuovi file Parquet di piccole dimensioni, e
+metadati aggiuntivi che, se non gestiti, degradano progressivamente le performance
+di lettura e aumentano in modo incontrollato i costi di storage.
+
+In un’implementazione standard appoggiata ad AWS Glue Catalog, il controllo
+di questo fenomeno richiede l’esecuzione periodica di procedure
+di compaction e snapshot expiration tramite job Spark custom schedulati,
+incrementando sensibilmente la complessità operativa e i costi di calcolo del sistema.
+
+Per ovviare a questa limitazione strutturale, la fase finale della progettazione
+ha previsto l’adozione di Amazon S3 Tables, un servizio AWS recentissimo completamente 
+gestito che estende S3 fornendo un supporto nativo al formato Iceberg. \cite{S3TablesDocs}
+
+Amazon S3 Tables è un servizio AWS completamente gestito che estende S3 con supporto nativo per il formato Iceberg. 
+A differenza della configurazione con GlueCatalog, in cui Iceberg viene configurato come layer applicativo sopra S3,
+S3 Tables introduce il concetto di \textbf{table bucket}: un tipo specializzato di bucket S3 in cui le operazioni 
+di manutenzione vengono eseguite automaticamente dall'infrastruttura AWS, senza necessità di job dedicati.
+
+Dal punto di vista implementativo, la migrazione da GlueCatalog a S3 Tables ha richiesto una modifica minima alla configurazione 
+della SparkSession: il catalog viene sostituito con \texttt{S3TablesCatalog}, e il warehouse viene specificato tramite l'ARN del table bucket anziché un percorso S3 convenzionale.
+
+Tutta la logica applicativa rimane invariata: la sostituzione del catalog è trasparente al codice delle trasformazioni.
+
+\subsection{Automazione della configurazione di Maintenance}
+
+Sebbene Amazon S3 Tables esegua le operazioni di manutenzione in background, le policy di esecuzione non sono predefinite. 
+I parametri ottimali dipendono fortemente dal workload specifico e possono essere configurati esplicitamente tramite le API di AWS.
+
+A tal fine, è stato sviluppato uno script Python dedicato (\texttt{tables-maintenance.py}). Sfruttando la libreria \texttt{boto3}, lo script itera sull'intero set di tabelle Iceberg del progetto, applicando in modo programmatico le configurazioni ottimali.
+
+Lo script gestisce tre categorie di operazioni, distinguendole in base al livello di granularità (tabella o bucket):
+
+\begin{itemize}
+    \item \textbf{Compaction} (per-table): consolida i file di piccole dimensioni prodotti dai \texttt{MERGE INTO} in file da 512~MB, dimensione ottimale per query analitiche su S3.
+    \item \textbf{Snapshot management} (per-table): mantiene almeno 7 snapshot per garantire time travel su un'intera settimana; gli snapshot con età superiore a 30 giorni vengono scaduti automaticamente.
+    \item \textbf{Unreferenced file removal} (per-bucket): rimuove i file orfani dopo 7 giorni e i file non più correnti dopo 14. Questa operazione è configurata una sola volta a livello di table bucket, non per singola tabella.
+\end{itemize}
+
+\section{Portabilità tra ambienti}
 script per spostare dati tra ambienti diversi
 
 \section{Gestione dei record compositi}
