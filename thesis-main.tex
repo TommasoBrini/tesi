@@ -1217,23 +1217,96 @@ Il risultato è un catalogo sempre allineato con lo stato effettivo dei dati, se
 L'adozione di Apache Iceberg ha reso possibile una revisione profonda del flusso di elaborazione, eliminando alcune delle ridondanze strutturali dell'architettura precedente e consentendo di semplificare sia il ciclo di vita del dato tra batch consecutivi, sia la configurazione dichiarativa delle tabelle, sia la logica applicativa dei job Spark.
 Le sezioni seguenti descrivono le scelte progettuali e implementative adottate, in risposta diretta alle criticità identificate nei capitoli precedenti.
 
-\subsection{Il nuovo ciclo di vita del dato (Eliminazione di FLOW)}
-% Architettura: Diagramma Prima/Dopo del ciclo di vita.
-% Spiegazione: L'unificazione di iStorage e oStorage, la fine delle copie fisiche.
+\subsection{Superamento del consolidamento fisico: eliminazione dello step FLOW}
+\label{sec:eliminazione-flow}
+Il problema centrale dell'architettura precedente era la necessità di copiare fisicamente l'output di ogni batch (\texttt{oStorage}) come input del batch successivo (\texttt{iStorage}).
+Questa operazione, orchestrata dallo step FLOW, generava una duplicazione dello storage, necessitando di elaborazioni notturne e rappresentando un punto di fragilità per l'idempotenza dell'intero sistema.
 
-\subsection{Gestione dello Stato e Idempotenza (Cursor Watermark)}
-% Implementazione: Visto che non copiamo più i file, come capiamo dove eravamo 
-% rimasti? Spiegazione del cursor watermark (risolve Problema 2).
+Con Iceberg, questa ridondanza scompare: ogni scrittura o aggiornamento produce un nuovo snapshot immutabile tramite un commit atomico sui metadati, senza sovrascrivere i dati esistenti. 
+Il batch successivo legge direttamente lo snapshot corrente della tabella, rendendo superflua qualsiasi directory di appoggio o copia fisica.
 
-\subsection{Evoluzione della Configurazione Dichiarativa}
-% Implementazione: Come si è snellito il file JSON (es. via oDeltaStorage e iErrors).
+Di conseguenza, le responsabilità dello step \texttt{FLOW} sono state drasticamente ridotte. La gravosa fase di consolidamento e copia notturna è stata interamente eliminata. Nella nuova pipeline, l'orchestrazione del \texttt{FLOW} si limita esclusivamente allo smistamento dei file sorgente grezzi in arrivo dalla banca verso le rispettive cartelle \texttt{import/}, fungendo da semplice innesco per il modulo \texttt{DATA}.
 
-\subsection{Transazioni Native: Il nuovo processo di Merge}
-% Implementazione: Come la vecchia logica in Scala/Spark viene sostituita 
-% dal comando nativo MERGE INTO di Iceberg.
+I benefici diretti sono:
 
-\subsection{Ottimizzazione degli Aggiornamenti sui Record Compositi}
-% Implementazione: Aggiornamenti selettivi delle singole colonne (risolve Problema 3).
+\begin{itemize}
+    \item \textbf{Eliminazione della duplicazione dello storage:} i dati esistono in un'unica tabella Iceberg su S3; non esiste più la distinzione tra copia di input e copia di output.
+    \item \textbf{Rollback senza interventi manuali:} gli snapshot precedenti restano accessibili tramite time travel; ripristinare uno stato precedente è un'operazione a livello di metadati, senza spostamenti fisici di file.
+    \item \textbf{Idempotenza strutturale:} ogni commit Iceberg è atomico; una riesecuzione accidentale del batch non corrompe lo stato della tabella, poiché il commit precedente rimane lo snapshot corrente fino al completamento con successo di uno nuovo.
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    node distance=0.55cm and 4cm,
+    batch/.style={rectangle, rounded corners=5pt, draw=black, thick,
+                  fill=black!8, minimum width=3.4cm, minimum height=0.7cm,
+                  align=center, font=\small\bfseries},
+    store/.style={rectangle, rounded corners=5pt, draw=black, thick,
+                  minimum width=3.4cm, minimum height=0.7cm,
+                  align=center, font=\small\ttfamily},
+    flow/.style={rectangle, rounded corners=5pt, draw=gray, thick, dashed,
+                 minimum width=3.4cm, minimum height=0.7cm,
+                 align=center, font=\small\itshape, text=gray},
+    arr/.style={-{Stealth[length=6pt]}, thick},
+    flowarr/.style={-{Stealth[length=6pt]}, thick, dashed, gray},
+    head/.style={font=\bfseries\normalsize}
+]
+
+%--- Prima ---
+\node[head] (la) {Prima};
+\node[batch, below=0.5cm of la]  (a1) {Batch T\\(DATA job)};
+\node[store, below=0.6cm of a1]  (a2) {\texttt{oStorage}};
+\node[flow,  below=0.6cm of a2]  (a3) {Step FLOW\\(copia fisica)};
+\node[store, below=0.6cm of a3]  (a4) {\texttt{iStorage}};
+\node[batch, below=0.6cm of a4]  (a5) {Batch T+1\\(DATA job)};
+
+\draw[arr]    (a1) -- (a2) node[midway,right,font=\scriptsize] {scrive};
+\draw[flowarr](a2) -- (a3);
+\draw[flowarr](a3) -- (a4) node[midway,right,font=\scriptsize,gray] {notturno};
+\draw[arr]    (a4) -- (a5) node[midway,right,font=\scriptsize] {legge};
+
+%--- Dopo ---
+\node[head, right=4cm of la] (lb) {Dopo};
+\node[batch, below=0.5cm of lb]  (b1) {Batch T\\(DATA job)};
+\node[store, below=0.6cm of b1]  (b2) {Tabella Iceberg\\(snapshot T)};
+\node[batch, below=1.42cm of b2] (b3) {Batch T+1\\(DATA job)};
+
+\draw[arr] (b1) -- (b2) node[midway,right,font=\scriptsize] {MERGE INTO};
+\draw[arr] (b2) -- (b3) node[midway,right,font=\scriptsize] {legge snapshot};
+
+\end{tikzpicture}
+\caption{Confronto tra architettura precedente (con copia FLOW) e nuova (con Iceberg)}
+\label{fig:flow-vs-iceberg}
+\end{figure}
+
+\subsection{Gestione dello Stato e Idempotenza: il Cursor Watermark}
+\label{sec:cursor-watermark}
+
+Con Parquet, la replicabilità era garantita strutturalmente dalla separazione tra \texttt{iStorage} e \texttt{oStorage}: rieseguire il batch del giorno T significava trovare sempre gli stessi file di partenza, perché lo step FLOW aggiornava \texttt{iStorage} solo al termine del consolidamento. 
+
+Con Iceberg questa separazione scompare: le tabelle sono \emph{live} e puntano sempre allo snapshot più recente. Senza un meccanismo esplicito, rieseguire il batch troverebbe uno stato già modificato dal run precedente.
+
+La soluzione adottata è un \textbf{cursor watermark} per-database: al termine di ogni batch completato con successo, il framework scrive un file JSON nella directory \texttt{\_watermark/} del warehouse Iceberg, registrando il timestamp del completamento e la lista delle tabelle coinvolte.
+
+\begin{lstlisting}[language=JSON, caption={Formato del cursor watermark}, label={lst:cursor-watermark}, basicstyle=\footnotesize\ttfamily]
+{
+  "updatedAt": "2026-04-17T14:26:34",
+  "batchTimestamp": 1776428794742,
+  "tables": [
+    "glue_catalog.pfp.MOVIMENTI",
+    "glue_catalog.pfp.CLIENTI"
+  ]
+}
+\end{lstlisting}
+
+Alla prima esecuzione assoluta il file non esiste ancora: il framework assegna quindi \texttt{null} allo storico di ogni tabella e le costruisce da zero. Al termine del batch il cursor viene scritto per la prima volta.
+
+Nelle esecuzioni successive, il cursor viene letto prima di qualsiasi operazione sulle tabelle. Lo storico di ogni tabella viene caricato tramite Spark SQL con la sintassi \texttt{SELECT * FROM <tabella> TIMESTAMP AS OF ‘<batchTimestamp>’} anziché dalla versione live, garantendo che il punto di partenza sia identico a quello del batch precedente. Se il batch fallisce con un’eccezione, il cursor non viene aggiornato: il prossimo tentativo ripartirà automaticamente dallo stato corretto, senza interventi manuali.
+
+A supporto dello sviluppo, il framework espone una \textbf{modalità \texttt{--dev-mode}}: il cursor non viene aggiornato a fine batch e, prima di ogni riesecuzione, le tabelle vengono automaticamente riportate allo snapshot consolidato di \textit{t-1} tramite la procedura nativa di Iceberg \texttt{rollback\_to\_timestamp(...)}.
+Lo sviluppatore può così eseguire il batch quante volte vuole, cambiando parametri, configurazioni o trasformazioni, ripartendo sempre dallo stesso stato di partenza, senza alcun intervento manuale sulle tabelle.
+
 
 
 \section{Amazon S3 Tables e Automazione della Maintenance}
