@@ -1584,8 +1584,27 @@ L'ultima fase della validazione progettuale consiste nel verificare che la soluz
 \end{description}
 
 \chapter{Conclusioni e sviluppi futuri}
+\label{chap:conclusioni}
 
+Il presente lavoro di tesi ha affrontato la riprogettazione e l'ottimizzazione del modulo di Data Integration aziendale, dimostrando come l'evoluzione dal tradizionale paradigma Data Lake verso un'architettura \textit{Transactional Lakehouse} possa generare un impatto profondamente positivo sia a livello ingegneristico che di business. 
 
+L'adozione combinata di \textbf{Apache Iceberg} e \textbf{Amazon S3 Tables} ha permesso di dotare l'azienda di un framework ETL nettamente più robusto, scalabile e manutenibile. Tutte le criticità strutturali identificate nell'architettura esistente sono state affrontate e risolte: l'eliminazione dei processi di copia massiva (\textit{step FLOW}) e la delega della manutenzione al livello di storage hanno drasticamente semplificato la complessità operativa. Allo stesso tempo, l'unificazione dei percorsi logici e la gestione nativa del versionamento tramite \textit{snapshot} hanno garantito una significativa riduzione dei costi di archiviazione, abbattendo la duplicazione dei dati su S3.
+
+Nonostante il pieno raggiungimento degli obiettivi prefissati, il percorso di ricerca e implementazione ha presentato alcune sfide tecniche rilevanti. La principale difficoltà è derivata dall'\textit{early adoption} di tecnologie allo stato dell'arte. In particolare, Amazon S3 Tables è un servizio introdotto sul mercato molto di recente: la scarsità di documentazione ufficiale avanzata, unita all'assenza di \textit{pattern} consolidati nelle \textit{community} open-source, ha richiesto un approccio fortemente sperimentale.
+
+Il lavoro presentato in questa tesi costituisce quindi una base solida per la modernizzazione della piattaforma, ma rimane ancora in fase prototipale. I passi naturali successivi sono i seguenti.
+
+\begin{itemize}
+    \item \textbf{Deployment in Produzione e Aggiornamento Librerie:} Il prossimo passo operativo consisterà nel consolidamento del codice sorgente sviluppato all'interno della libreria ufficiale aziendale. 
+    
+    \item \textbf{Stress Test su Dataset di Produzione:} Nonostante i benchmark attuali abbiano confermato la tenuta prestazionale del sistema su un campione rappresentativo, sarà fondamentale eseguire un collaudo sui volumi storici completi. Questo permetterà di tarare con precisione millimetrica le \textit{policy} di \textit{compaction} e \textit{snapshot expiration} configurate nello script di manutenzione automatica.
+    
+    \item \textbf{Evoluzione del Cloud Ecosystem:} Considerata la rapidità con cui il panorama del Data Engineering sta evolvendo, sarà strategico mantenere un monitoraggio attivo sulle successive \textit{release} di AWS. Le future integrazioni native tra Amazon Athena, AWS Glue e le S3 Tables potrebbero aprire ulteriori margini per massimizzare le performance di lettura e interrogazione dei dati esposti dal framework.
+
+    \item \textbf{Estensione del modulo per aggiornamenti parziali:} Per ora, la gestione degli aggiornamenti parziali si è limitata ai record compositi da informazioni derivanti da fonti eterogenee. Un possibile sviluppo futuro potrebbe estendere questa logica, andando a supportare aggiornamenti parziali anche su record derivati da transformazioni complesse. Un approccio architetturale promettente consisterebbe nell'implementare un \textit{query executor} dedicato, in grado di generare il record "parziale" da validare direttamente in memoria, eliminando il costoso overhead di caricamento dell'intero record dallo storico.
+\end{itemize}
+
+In conclusione, il framework progettato non rappresenta solo la soluzione alle criticità attuali, ma costituisce una base tecnologica predisposta per accogliere i crescenti volumi di dati e le future necessità analitiche dell'azienda.
 
 %----------------------------------------------------------------------------------------
 % BIBLIOGRAPHY
