@@ -1404,6 +1404,7 @@ Il flusso di migrazione si articola in tre fasi:
 
 L'unica limitazione rilevante di questo approccio è la perdita della storia degli snapshot: la tabella in destinazione nasce con un unico snapshot, senza time travel sui dati storici della sorgente. Per gli scopi di sviluppo e test a cui è destinata la migrazione, questa perdita è considerata accettabile.
 
+\newpage
 \section{Gestione dei Record Compositi}
 \label{sec:record-compositi}
 
@@ -1460,7 +1461,7 @@ Questo tipo di entità, denominato \textbf{record composito}, è costruita dall'
 
 \subsection{Criticità nell'architettura esistente}
 
-Con l'architettura basata su Parquet, il pipeline di validazione richiedeva che il DataFrame in ingresso contenesse il record completo. 
+Con l'architettura basata su Parquet, la pipeline di validazione richiedeva che il DataFrame in ingresso contenesse il record completo. 
 Il meccanismo di validazione opera infatti sullo schema full e produce l'output solo a partire da un record integro. Di conseguenza, se al giorno $T$ arrivava solo un aggiornamento parziale (ad esempio solo i dati economici), il sistema era costretto a ricaricare \emph{tutti} i file sorgente, ricostruire l'intero record e rieseguire il merge completo. Il costo computazionale scalava con il numero di sorgenti indipendentemente da quante fossero effettivamente cambiate.
 
 \subsection{Soluzione proposta: Merge per Gruppo e Staging Iceberg}
@@ -1476,10 +1477,61 @@ A ogni batch, il framework verifica quali record in staging hanno ricevuto tutti
 \chapter{Test e risultati}
 \label{chap:testing-and-results}
 
+A valle della fase di implementazione, il nuovo framework basato sul paradigma Transactional Lakehouse è stato sottoposto a una serie di test in ambiente di validazione. 
+L'obiettivo di questa fase è misurare l'impatto reale dell'introduzione di Apache Iceberg e Amazon S3 Tables, confrontando la nuova soluzione con l'architettura esistente sia in termini di complessità operativa sia di pure prestazioni computazionali.
+
+\section{Confronto Architetturale e Qualitativo}
+L'evoluzione della piattaforma ETL non è avvenuta con un singolo salto tecnologico, ma ha attraversato tre stadi architetturali distinti, ciascuno dei quali ha introdotto specifici compromessi (trade-off) tra funzionalità, prestazioni e complessità di manutenzione:
+
+\begin{enumerate}
+    \item \textbf{Data Lake Parquet:} L'architettura di partenza, basata su file Parquet grezzi gestiti tramite AWS Glue e isolamento fisico delle directory.
+    \item \textbf{Iceberg con AWS Glue Catalog:} La prima soluzione implementata, che ha introdotto transazionalità e metadati sostituendo la logica custom con le funzionalità native di Iceberg.
+    \item \textbf{Iceberg con Amazon S3 Tables:} L'evoluzione managed che ha delegato al livello di storage l'onere della manutenzione del formato tabellare.
+\end{enumerate}
+
+La Tabella seguente riassume qualitativamente le differenze chiave tra i tre approcci.
+
+\begin{table}[H]
+\centering
+\small
+\caption{Confronto tra le tre architetture.}
+\label{tab:confronto-architetture}
+\renewcommand{\arraystretch}{1.4}
+\begin{tabular}{>{\raggedright}p{38mm}>{\centering}p{28mm}>{\centering}p{28mm}>{\centering\arraybackslash}p{32mm}}
+\toprule
+\textbf{Caratteristica} & \textbf{Parquet (As-Is)} & \textbf{Iceberg su Glue} & \textbf{Iceberg su S3 Tables} \\
+\midrule
+\textbf{Formato dati}        & Apache Parquet         & Apache Iceberg          & Apache Iceberg (gestito) \\
+\textbf{Transazioni ACID}    & No                     & Sì                      & Sì \\
+\textbf{Merge / Update}      & Simulati (riscrittura) & Nativi                  & Nativi \\
+\textbf{Idempotenza}         & Custom                 & Nativa (cursor)         & Nativa (cursor) \\
+\textbf{Gestione metadati}   & Crawler Glue           & Glue Catalog            & Automatica \\
+\textbf{Time Travel}         & No                     & Snapshot Iceberg        & Snapshot Iceberg \\
+\textbf{Complessità ETL}     & Alta                   & Media                   & Bassa \\
+\textbf{Manutenzione}        & Manuale                & Elevata                 & Minima \\
+\textbf{Controllo}           & Totale                 & Elevato                 & Limitato \\
+\textbf{Scalabilità}         & Limitata               & Elevata                 & Elevata \\
+\textbf{Portabilità}         & Alta                   & Molto alta              & Limitata (AWS) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Benchmark Prestazionali}
+L'azienda mi ha fornito credenziali AWS e un dataset di test contenente circa 2 milioni di clienti, 
+% La tabella con i tempi di esecuzione e l'analisi dei risultati.
+
+\section{Verifica dei Requisiti: Risoluzione delle Criticità}
+% I 6 problemi del Capitolo 3 ripresi uno ad uno per mostrare come sono stati risolti.
+
+
+
+tabella di confronto tra batch eseguiti con dataset da 2milioni di clienti (Credem)
+
+risposta ai 6 punti critici, con soddisfazione dei requisiti
+
+
 \begin{itemize}
     \item Benchmark di Performance: Confronto tra il vecchio sistema e il nuovo (tempi di esecuzione del batch).
-    \item Affidabilità: Dimostrazione del supporto alle transazioni ACID (es. cosa succede se un job fallisce a metà).
-    \item Costi: Impatto dell'ottimizzazione dei file (Compaction) sui costi di storage.
     \item Risposta ai 6 punti critici
 \end{itemize}
 
