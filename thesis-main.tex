@@ -484,7 +484,7 @@ L'azienda offre una libreria per integrare e elaborare flussi di dati provenient
 
 Questa libreria è progettata come un tool per integrare ed elaborare flussi di dati, tipicamente ottenuti sotto forma di file testuali, nell'ambito della realizzazione di un Personal Financial Planner (PFP).
 
-Utilizza tecnologie come Apache Spark e Scala, e si appoggia sui servizi cloud offerti dall'infrastruttura AWS, consentendo agli sviluppatori di evitare di riscrivere procedure appartenenti a pattern largamente diffusi e utilizzati in Prometeia. 
+Utilizza tecnologie come Apache Spark e Scala e si appoggia sui servizi cloud offerti dall'infrastruttura AWS, consentendo agli sviluppatori di evitare di riscrivere procedure appartenenti a pattern largamente diffusi e utilizzati in Prometeia. 
 Offre anche un alto grado di affidabilità e scalabilità rispetto alla quantità e numerosità dei dati processati.
 
 La libreria si compone di diversi moduli che possono essere integrati e modificati a seconda delle esigenze del progetto. I moduli principali sono:
@@ -1024,7 +1024,7 @@ In sostanza, per ogni tabella in modalità delta:
 \begin{enumerate}
     \item Il batch del giorno T-1 produce oStorage e oErrors.
     \item Lo step FLOW del giorno T copia questi output nelle cartelle di input (iStorage e iErrors) per il batch del giorno T.
-    \item Il batch del giorno T legge lo storico da iStorage, i nuovi dati da source, e gli scarti da iErrors, eseguendo tutte le fasi di validazione e merge.
+    \item Il batch del giorno T legge lo storico da iStorage, i nuovi dati da source e gli scarti da iErrors, eseguendo tutte le fasi di validazione e merge.
     \item Al termine dell'esecuzione, il batch del giorno T produce un nuovo oStorage (dataset completo aggiornato) e oDeltaStorage (solo le variazioni rispetto allo storico), che saranno a loro volta promossi a input per il batch successivo.
 \end{enumerate}
 
@@ -1037,6 +1037,7 @@ In sostanza, per ogni tabella in modalità delta:
 \end{figure}
 
 \section{Criticità dell’Architettura Corrente}
+\label{sec:criticita-architettura}
 L’architettura attuale, basata su file Parquet grezzi e copie fisiche tra cartelle S3, presenta alcune limitazioni strutturali che compromettono la robustezza, la scalabilità e la manutenibilità della pipeline. Di seguito vengono identificati i principali punti critici emersi durante l’analisi del sistema.
 
 \subsection{Problema 1: Copia Fisica dei Dati tra Batch Consecutivi}
@@ -1153,7 +1154,7 @@ Maintenance manuale         & Automazione della maintenance \\
 
 La scelta architetturale centrale consiste nell'introduzione di \textbf{Apache Iceberg} come Open Table Format, interposto tra il livello di elaborazione (Apache Spark su AWS Glue) e il livello di storage (Amazon S3). Iceberg aggiunge un layer di metadati versionati sopra i file Parquet esistenti, abilitando transazionalità ACID, snapshot isolation e gestione evoluta dello schema senza modificare il formato fisico dei dati.
 
-Rispetto ad alternative concorrenti come Delta Lake e Apache Hudi, Iceberg è stato preferito per tre ragioni principali: la natura completamente open-source della specifica, l'astrazione pulita del layer dei metadati indipendente dal motore di calcolo, e l'integrazione nativa con l'ecosistema AWS, incluso il Glue Catalog e le Amazon S3 Tables \cite{S3TablesDocs}, che adottano Iceberg come formato di riferimento.
+Rispetto ad alternative concorrenti come Delta Lake e Apache Hudi, Iceberg è stato preferito per tre ragioni principali: la natura completamente open-source della specifica, l'astrazione pulita del layer dei metadati indipendente dal motore di calcolo e l'integrazione nativa con l'ecosistema AWS, incluso il Glue Catalog e le Amazon S3 Tables \cite{S3TablesDocs}, che adottano Iceberg come formato di riferimento.
 
 L'adozione di Iceberg preserva i due pilastri infrastrutturali esistenti:
 
@@ -1313,7 +1314,7 @@ Lo sviluppatore può così eseguire il batch quante volte vuole, cambiando param
 
 Ogni tabella del framework è descritta da un file JSON che ne specifica sorgente, schema, chiavi e comportamento di merge. Come mostrato nel Listing~\ref{lst:config-delta}, la configurazione in modalità delta richiedeva cinque percorsi S3 distinti: lo storico di input (\texttt{iStorage}, \texttt{iErrors}), la destinazione di output (\texttt{oStorage}, \texttt{oErrors}) e il delta giornaliero (\texttt{oDeltaStorage}). Questi percorsi erano espressi come path assoluti, rendendo la configurazione dipendente dall'ambiente di esecuzione.
 
-Con Iceberg, la gestione dello stato storico è delegata al formato stesso: il cursor watermark sa da quale snapshot leggere, e il catalogo Glue conosce la posizione fisica della tabella. I soli campi specifici per Iceberg da aggiungere alla configurazione esistente sono \texttt{storageFormat} e \texttt{writeMode}; tutto il resto — schema, chiavi, trasformazioni — rimane invariato:
+Con Iceberg, la gestione dello stato storico è delegata al formato stesso: il cursor watermark sa da quale snapshot leggere e il catalogo Glue conosce la posizione fisica della tabella. I soli campi specifici per Iceberg da aggiungere alla configurazione esistente sono \texttt{storageFormat} e \texttt{writeMode}; tutto il resto — schema, chiavi, trasformazioni — rimane invariato:
 
 \begin{lstlisting}[language=JSON, caption={Configurazione tabella in modalità Iceberg Delta}, label={lst:config-iceberg}]
 {
@@ -1355,7 +1356,7 @@ S3 Tables introduce il concetto di \textbf{table bucket}: un tipo specializzato 
 di manutenzione vengono eseguite automaticamente dall'infrastruttura AWS, senza necessità di job dedicati.
 
 Dal punto di vista implementativo, la migrazione da GlueCatalog a S3 Tables ha richiesto una modifica minima alla configurazione 
-della SparkSession: il catalog viene sostituito con \texttt{S3TablesCatalog}, e il warehouse viene specificato tramite l'ARN del table bucket anziché un percorso S3 convenzionale.
+della SparkSession: il catalog viene sostituito con \texttt{S3TablesCatalog} e il warehouse viene specificato tramite l'ARN del table bucket anziché un percorso S3 convenzionale.
 
 Tutta la logica applicativa rimane invariata: la sostituzione del catalog è trasparente al codice delle trasformazioni.
 
@@ -1468,7 +1469,7 @@ Il meccanismo di validazione opera infatti sullo schema full e produce l'output 
 
 Il \texttt{MERGE INTO} nativo di Iceberg rende possibile ciò che con Parquet non era realizzabile: aggiornare selettivamente le colonne di un solo gruppo sorgente, lasciando intatte quelle degli altri. L'architettura viene ridisegnata per processare ogni gruppo in modo indipendente, con due percorsi distinti in base allo stato della chiave primaria.
 
-\textbf{Chiave già presente in tabella.} Il sistema esegue un \texttt{MERGE INTO} che include nella clausola \texttt{UPDATE SET} esclusivamente le colonne del gruppo sorgente corrente. Se in un giorno arriva solo il gruppo dei dati economici, le colonne anagrafiche rimangono invariate: nessuna rilettura delle altre sorgenti è necessaria, e nessuna sovrascrittura accidentale è possibile. Ogni gruppo produce uno snapshot Iceberg atomico circoscritto al proprio sottoinsieme di colonne.
+\textbf{Chiave già presente in tabella.} Il sistema esegue un \texttt{MERGE INTO} che include nella clausola \texttt{UPDATE SET} esclusivamente le colonne del gruppo sorgente corrente. Se in un giorno arriva solo il gruppo dei dati economici, le colonne anagrafiche rimangono invariate: nessuna rilettura delle altre sorgenti è necessaria e nessuna sovrascrittura accidentale è possibile. Ogni gruppo produce uno snapshot Iceberg atomico circoscritto al proprio sottoinsieme di colonne.
 
 \textbf{Chiave non ancora in tabella.} Se una chiave primaria è nuova e non tutti i gruppi obbligatori sono ancora arrivati, il record non può essere inserito direttamente nella tabella finale in forma incompleta. Viene invece scritto in una \textbf{tabella di staging} Iceberg dedicata, che accumula le contribuzioni dei vari gruppi e registra per ogni chiave quali sorgenti sono già state ricevute.
 
@@ -1516,44 +1517,75 @@ La Tabella seguente riassume qualitativamente le differenze chiave tra i tre app
 \end{tabular}
 \end{table}
 
+\newpage
 \section{Benchmark Prestazionali}
-L'azienda mi ha fornito credenziali AWS e un dataset di test contenente circa 2 milioni di clienti, 
-% La tabella con i tempi di esecuzione e l'analisi dei risultati.
+\label{sec:benchmark}
 
-\section{Verifica dei Requisiti: Risoluzione delle Criticità}
-% I 6 problemi del Capitolo 3 ripresi uno ad uno per mostrare come sono stati risolti.
+Al fine di valutare l'impatto prestazionale delle soluzioni implementate, l'azienda ha messo a disposizione un ambiente AWS dedicato e un dataset di test rappresentativo dei volumi di produzione. Il campione utilizzato è composto da circa 2 milioni di anagrafiche clienti, 1,9 milioni di rapporti, 2,8 milioni di saldi e 195 mila strumenti finanziari.
 
-
-
-tabella di confronto tra batch eseguiti con dataset da 2milioni di clienti (Credem)
-
-risposta ai 6 punti critici, con soddisfazione dei requisiti
-
+Per rendere il confronto significativo, ogni architettura è stata testata in due scenari distinti:
 
 \begin{itemize}
-    \item Benchmark di Performance: Confronto tra il vecchio sistema e il nuovo (tempi di esecuzione del batch).
-    \item Risposta ai 6 punti critici
+    \item \textbf{Batch 1 - senza storico:} le tabelle di destinazione sono vuote; il batch carica i dati dalla sorgente senza eseguire operazioni di merge.
+    \item \textbf{Batch 2 - con storico ($t$ e $t{-}1$):} le tabelle contengono già i dati del batch precedente; il batch esegue il merge completo tra stato corrente e storico.
 \end{itemize}
 
-\begin{figure}
-    \centering
-    \includegraphics[width=.8\linewidth]{figures/massive-test.pdf}
-    \caption{Massive test.}
-    \label{fig:massive-test}
-\end{figure}
+\begin{table}[H]
+\centering
+\small
+\caption{Tempi di esecuzione del batch completo per le tre architetture.}
+\label{tab:benchmark}
+\renewcommand{\arraystretch}{1.4}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Architettura} & \textbf{Batch 1 (senza storico)} & \textbf{Batch 2 (con merge)} \\
+\midrule
+Parquet (As-Is)       & 4 min 37 s & 6 min 19 s \\
+Iceberg su Glue       & 5 min 29 s & 7 min 02 s \\
+Iceberg su S3 Tables  & 4 min 30 s & 6 min 53 s \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Dall'analisi dei risultati emergono tre considerazioni fondamentali che validano il successo dell'implementazione:
+
+\begin{itemize}
+    \item \textbf{Mantenimento delle Performance:} I tempi di calcolo rimangono nello stesso ordine di grandezza dell'architettura preesistente. Il leggero \textit{overhead} temporale introdotto dalla complessa gestione transazionale dei metadati in Iceberg standard viene ampiamente compensato dall'infrastruttura ottimizzata di S3 Tables. Quest'ultima riporta i tempi di esecuzione a livelli paragonabili rispetto al Parquet puro. Il vincolo progettuale di non degradare le performance esistenti è stato quindi pienamente rispettato.
+    
+    \item \textbf{Abbattimento dei Costi di Storage:} Sebbene i tempi di elaborazione siano allineati, a livello di storage l'impatto del nuovo sistema è drasticamente inferiore. L'eliminazione dello step \texttt{FLOW} e la conseguente rimozione della duplicazione fisica tra i percorsi \texttt{iStorage} e \texttt{oStorage} riducono di fatto l'occupazione spaziale su Amazon S3. A questo si aggiunge l'efficienza della \textit{compaction} automatica di S3 Tables, che riduce attivamente il numero di \textit{small files} generati dalle continue operazioni di merge.
+    
+    \item \textbf{Riduzione della Complessità Operativa:} Oltre ai benefici infrastrutturali, la soluzione proposta azzera l'onere della manutenzione attiva. L'eliminazione dei Glue Crawler per la sincronizzazione dello schema e la delega ad S3 Tables delle macchinose operazioni di compattamento manuale liberano risorse ingegneristiche preziose, semplificando radicalmente la gestione complessiva della piattaforma.
+\end{itemize}
+
+\section{Verifica dei Requisiti}
+\label{sec:verifica-requisiti}
+L'ultima fase della validazione progettuale consiste nel verificare che la soluzione implementata abbia effettivamente neutralizzato tutte le limitazioni strutturali identificate durante l'analisi del sistema As-is (Sezione \ref{sec:criticita-architettura}).
+
+\begin{description}
+
+    \item[Problema 1 - Copia fisica dei dati tra batch consecutivi.]
+    Lo step FLOW, che copiava i file da \texttt{oStorage} a \texttt{iStorage} ad ogni ciclo, è stato eliminato. Iceberg mantiene lo stato consolidato direttamente nella tabella tramite snapshot: il batch legge lo stato precedente via time travel e scrive il nuovo snapshot nella stessa tabella, senza alcuna duplicazione fisica.
+
+    \item[Problema 2 - Assenza di idempotenza nativa e di rollback.]
+    Il cursor watermark garantisce idempotenza strutturale: se il batch fallisce, il cursor non viene aggiornato e la riesecuzione riparte dallo stesso stato consolidato. In modalità sviluppo, le tabelle vengono automaticamente riportate allo snapshot precedente tramite il rollback nativo di Iceberg, senza intervento manuale.
+
+    \item[Problema 3 - Aggiornamento parziale su record compositi.]
+    Il \texttt{MERGE INTO} nativo di Iceberg consente di aggiornare selettivamente le colonne di un solo gruppo sorgente, senza rigenerare l'intero record. Per le chiavi nuove ancora incomplete, la tabella di staging accumula i gruppi e promuove il record solo quando tutti i gruppi obbligatori sono stati ricevuti.
+
+    \item[Problema 4 - Portabilità tra ambienti.]
+    La migrazione tra ambienti è gestita tramite esportazione logica dei dati: lo schema e i dati vengono esportati indipendentemente dai metadati Iceberg e la tabella viene ricreata nel catalogo di destinazione da zero. Questo approccio preserva la portabilità pur operando su un formato con metadati strutturati.
+
+    \item[Problema 5 - Dipendenza dai Glue Crawler.]
+    Iceberg gestisce autonomamente i metadati della tabella ad ogni scrittura: schema, partizioni e statistiche sono sempre aggiornati al termine di ogni batch senza alcun processo esterno. I Glue Crawler sono stati eliminati dalla pipeline.
+
+    \item[Problema 6 - Gestione del compattamento dei file.]
+    Su Iceberg con Glue, la compaction è configurabile tramite procedure Spark. Su Amazon S3 Tables, la manutenzione è completamente automatica: compaction, scadenza degli snapshot e rimozione dei file orfani vengono eseguiti dal servizio in background, con parametri configurabili tramite API.
+
+\end{description}
 
 \chapter{Conclusioni e sviluppi futuri}
 
-\begin{itemize}
-    \item Risultati raggiunti: Sintesi dei benefici ottenuti dall'azienda.
-    \item Limiti riscontrati: Eventuali criticità del framework o dei servizi AWS durante lo sviluppo.
-    \item Evoluzioni: aggiornamento parziale sui record compositi
-\end{itemize}
-%You may also put some code snippet (which is NOT float by default), eg: \cref{lst:random-code}.
 
-%\lstinputlisting[float,language=Java,label={lst:random-code}]{listings/HelloWorld.java}
-
-%\section{Fancy formulas here}
 
 %----------------------------------------------------------------------------------------
 % BIBLIOGRAPHY
