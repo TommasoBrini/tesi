@@ -73,15 +73,15 @@ Il presente lavoro di tesi è stato sviluppato nell'ambito di un tirocinio svolt
 Negli ultimi anni la crescita esponenziale dei dati generati da applicazioni distribuite, sistemi transazionali e servizi cloud ha reso necessaria l'evoluzione delle architetture aziendali per la gestione e l'analisi dei dati.
 In questo contesto, i processi di \textbf{Extract, Transform, Load} \textbf{(ETL)} hanno assunto un ruolo centrale nelle pipeline di data engineering, richiedendo soluzioni sempre più scalabili, affidabili e flessibili.
 
-La diffusione dei paradigmi Big Data ha favorito l'adozione dei Data Lake, architetture basate su storage distribuito in grado di memorizzare e gestire grandi quantità di dati eterogenei a costi ridotti. 
-Formati colonnari come Apache Parquet hanno quindi rappresentato uno standard de facto per l'elaborazione distribuita tramite framework come Apache Spark. 
-Nel modello Lakehouse, i Data Lake moderni si basano infatti su storage cloud economico e formati aperti per supportare workload analitici e di machine learning. \cite{armbrust2021lakehouse} \cite{begoli2021lakehouse}
+La diffusione dei paradigmi Big Data ha favorito l'adozione dei Data Lake, architetture basate su storage distribuito in grado di memorizzare e gestire grandi quantità di dati eterogenei a costi ridotti.
+Formati colonnari come Apache Parquet hanno quindi rappresentato uno standard de facto per l'elaborazione distribuita tramite framework come Apache Spark.
 
 Nonostante i vantaggi in termini di costo e scalabilità, l'approccio tradizionale basato su file Parquet presenta alcune limitazioni significative.
 In particolare, i Data Lake classici non forniscono nativamente proprietà transazionali ACID, una gestione evoluta dei metadati o un supporto efficiente per operazioni di aggiornamento incrementale.
 Operazioni come UPDATE, DELETE e MERGE richiedono quindi meccanismi applicativi complessi, spesso basati sulla riscrittura di intere partizioni o dataset, con un aumento della complessità delle pipeline ETL e del rischio di inconsistenze nei dati.
 
-Per superare tali criticità si è diffuso il paradigma del Data Lakehouse, che combina la flessibilità dei Data Lake con caratteristiche tipiche dei Data Warehouse, introducendo transazioni, versionamento dei dati, schema evolution e una gestione avanzata dei metadati. \cite{saha2024disruptor}
+Per superare tali criticità si è diffuso il paradigma del Data Lakehouse, che combina la flessibilità dei Data Lake con caratteristiche tipiche dei Data Warehouse, introducendo transazioni, versionamento dei dati, schema evolution e una gestione avanzata dei metadati.
+In questo modello, i dati risiedono su storage cloud economico e formati aperti, abilitando workload analitici e di machine learning con le garanzie di affidabilità tipiche dei sistemi warehouse tradizionali. \cite{armbrust2021lakehouse} \cite{begoli2021lakehouse} \cite{saha2024disruptor}
 
 Tra le tecnologie emergenti in questo ambito, Apache Iceberg si è affermato come uno dei principali table format open-source per la gestione di dataset analitici su larga scala.
 Iceberg introduce un layer di metadata management che separa la struttura logica della tabella dalla disposizione fisica dei file su storage object-based, consentendo la gestione di snapshot consistenti, time travel e operazioni incrementali transazionali. \cite{IcebergDocs}
@@ -332,8 +332,6 @@ Nel contesto di questa tesi, l’attenzione è rivolta principalmente ad Apache 
 Apache Iceberg è uno degli Open Table Formats più diffusi, progettato per portare il comportamento, la flessibilità e l'affidabilità tipici del linguaggio SQL all'interno degli ecosistemi Big Data. 
 Ideato originariamente da Netflix per superare i limiti operativi di Apache Hive e successivamente donato alla Apache Software Foundation, 
 Iceberg introduce un layer avanzato di metadata management che consente di implementare transazioni ACID, versionamento dei dati e operazioni incrementali affidabili su object storage cloud-based. \cite{saha2024disruptor}
-
-Le immagini e le tabelle di questo capitolo sono state prese dal tutorial di Iceberg realizzato da Confluent Developer \cite{confluent_iceberg_playlist}.
 
 \subsection{Architettura dei metadata}
 L'infrastruttura di Iceberg si discosta dagli altri table format per la sua complessa architettura dei metadati di natura gerarchica e stratificata.
@@ -617,7 +615,7 @@ Ogni tabella configurata attraversa 7 fasi sequenziali.
     \label{fig:fasi-workflow}
 \end{figure}
 
-Al fine di risolvere conflitti di dipendenze circolari, è stato aggiunta un ultimo step successivo al merge, denominato \textit{Post Execution}.
+Al fine di risolvere conflitti di dipendenze circolari, è stato aggiunto un ultimo step successivo al merge, denominato \textit{Post Execution}.
 In questa fase vengono eseguite operazioni di post-processing e le trasformazioni finali con accesso a tutte le tabelle processate.
 
 L'ordine effettivo di esecuzione delle fasi è quindi il seguente:
@@ -663,7 +661,7 @@ Il workflow data si compone quindi delle sopracitate fasi alternate dall'esecuzi
     \label{fig:fasi-workflow}
 \end{figure}
 
-La tabella seguente riassume le 7 fasi del workflow DATA, evidenziando le operazioni principali eseguite in ciascuna fase e il loro scopo all'interno del processo di ingestione dei dati.
+La tabella seguente riassume le 8 fasi del workflow DATA, evidenziando le operazioni principali eseguite in ciascuna fase e il loro scopo all'interno del processo di ingestione dei dati.
 Verranno anche assegnati i punti di aggancio degli hook personalizzati, che consentono di inserire logiche di trasformazione specifiche in momenti chiave del workflow.
 \begin{table}[H]
 \centering\footnotesize
@@ -808,7 +806,7 @@ oErrors  & Output & Scarti del giorno \\
 \subsection{Modalità Delta}
 L’alimentante invia ogni giorno solo i record nuovi o modificati. 
 
-E' la modalità più delicata da gestire, in quanto richiede il merge con lo storico del giorno precedente e una gestione accurata degli scarti.
+È la modalità più delicata da gestire, in quanto richiede il merge con lo storico del giorno precedente e una gestione accurata degli scarti.
 
 \subsubsection{Caratteristiche}
 \begin{itemize}
@@ -1350,9 +1348,8 @@ Per ovviare a questa limitazione strutturale, la fase finale della progettazione
 ha previsto l’adozione di Amazon S3 Tables, un servizio AWS recentissimo completamente 
 gestito che estende S3 fornendo un supporto nativo al formato Iceberg. \cite{S3TablesDocs}
 
-Amazon S3 Tables è un servizio AWS completamente gestito che estende S3 con supporto nativo per il formato Iceberg. 
-A differenza della configurazione con GlueCatalog, in cui Iceberg viene configurato come layer applicativo sopra S3,
-S3 Tables introduce il concetto di \textbf{table bucket}: un tipo specializzato di bucket S3 in cui le operazioni 
+A differenza della configurazione con Glue Catalog, in cui Iceberg viene configurato come layer applicativo sopra S3,
+S3 Tables introduce il concetto di \textbf{table bucket}: un tipo specializzato di bucket S3 in cui le operazioni
 di manutenzione vengono eseguite automaticamente dall'infrastruttura AWS, senza necessità di job dedicati.
 
 Dal punto di vista implementativo, la migrazione da GlueCatalog a S3 Tables ha richiesto una modifica minima alla configurazione 
@@ -1410,7 +1407,7 @@ L'unica limitazione rilevante di questo approccio è la perdita della storia deg
 \label{sec:record-compositi}
 
 Una tabella finale può essere il risultato della fusione di più file sorgente eterogenei, ciascuno dei quali contribuisce un sottoinsieme disgiunto di colonne allo schema complessivo. 
-Questo tipo di entità, denominato \textbf{record composito}, è costruita dall'unione di $n$ gruppi sorgente accomunati dalla stessa chiave primaria.
+Questo tipo di entità, denominato \textbf{record composito}, è costruito dall'unione di $n$ gruppi sorgente accomunati dalla stessa chiave primaria.
 
 
 \begin{figure}[h]
@@ -1550,7 +1547,7 @@ Iceberg su S3 Tables  & 4 min 30 s & 6 min 53 s \\
 Dall'analisi dei risultati emergono tre considerazioni fondamentali che validano il successo dell'implementazione:
 
 \begin{itemize}
-    \item \textbf{Mantenimento delle Performance:} I tempi di calcolo rimangono nello stesso ordine di grandezza dell'architettura preesistente. Il leggero \textit{overhead} temporale introdotto dalla complessa gestione transazionale dei metadati in Iceberg standard viene ampiamente compensato dall'infrastruttura ottimizzata di S3 Tables. Quest'ultima riporta i tempi di esecuzione a livelli paragonabili rispetto al Parquet puro. Il vincolo progettuale di non degradare le performance esistenti è stato quindi pienamente rispettato.
+    \item \textbf{Mantenimento delle Performance:} I tempi di calcolo si mantengono nello stesso ordine di grandezza dell'architettura preesistente. La configurazione Iceberg su Glue Catalog introduce l'overhead più rilevante, attribuibile alla gestione transazionale dei metadati e ai commit atomici verso il catalogo. S3 Tables riduce sensibilmente tale overhead. Considerata la significativa riduzione della complessità operativa ottenuta con l'eliminazione dello step FLOW, la transazionalità e la gestione automatica del catalogo, il vincolo progettuale di non degradare le performance esistenti può ritenersi \textit{sostanzialmente} rispettato, con un overhead residuo contenuto e giustificato dalle garanzie transazionali acquisite.
     
     \item \textbf{Abbattimento dei Costi di Storage:} Sebbene i tempi di elaborazione siano allineati, a livello di storage l'impatto del nuovo sistema è drasticamente inferiore. L'eliminazione dello step \texttt{FLOW} e la conseguente rimozione della duplicazione fisica tra i percorsi \texttt{iStorage} e \texttt{oStorage} riducono di fatto l'occupazione spaziale su Amazon S3. A questo si aggiunge l'efficienza della \textit{compaction} automatica di S3 Tables, che riduce attivamente il numero di \textit{small files} generati dalle continue operazioni di merge.
     
@@ -1611,8 +1608,6 @@ In conclusione, il framework progettato non rappresenta solo la soluzione alle c
 %----------------------------------------------------------------------------------------
 
 \backmatter
-
-\nocite{*} % Remove this as soon as you have the first citation
 
 \bibliographystyle{alpha}
 \bibliography{bibliography}
