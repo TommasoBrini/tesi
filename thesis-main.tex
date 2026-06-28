@@ -1407,21 +1407,71 @@ L'unica limitazione rilevante di questo approccio è la perdita della storia deg
 \section{Gestione dei Record Compositi}
 \label{sec:record-compositi}
 
-Un \textbf{record composito} è un record la cui struttura è costruita dall'unione di colonne provenienti da più sorgenti eterogenee, accomunate dalla stessa chiave primaria. Ogni sorgente contribuisce un sottoinsieme disgiunto di colonne, identificato da un codice gruppo: a titolo di esempio, un gruppo \texttt{ANA} potrebbe fornire attributi anagrafici e un gruppo \texttt{SALDI} attributi economici per lo stesso cliente. Il risultato finale è una tabella denormalizzata che integra tutti i gruppi.
+Una tabella finale può essere il risultato della fusione di più file sorgente eterogenei, ciascuno dei quali contribuisce un sottoinsieme disgiunto di colonne allo schema complessivo. 
+Questo tipo di entità, denominato \textbf{record composito}, è costruita dall'unione di $n$ gruppi sorgente accomunati dalla stessa chiave primaria.
 
-Il problema fondamentale è l'\textbf{asincronìa}: le sorgenti non sempre arrivano insieme nello stesso batch. Con un \texttt{MERGE INTO} che opera sull'intera riga, l'arrivo di un solo gruppo produrrebbe uno di due effetti inaccettabili: sovrascrivere con null le colonne degli altri gruppi, oppure non riuscire a inserire il record per i vincoli di not-null. La configurazione della tabella riflette questa struttura: anziché un singolo \texttt{source}, si elencano i gruppi con i rispettivi file e colonne, e si specifica quali gruppi sono obbligatori affinché un record possa essere considerato completo.
 
-\subsection{Aggiornamento Parziale per Chiavi Esistenti}
-\label{sec:record-compositi-merge}
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+    node distance=6mm and 14mm,
+    box/.style={draw, rounded corners=2pt, font=\small\ttfamily,
+                inner sep=5pt, align=left},
+    grp/.style={box, fill=gray!10},
+    hdr/.style={box, fill=gray!30, font=\small\bfseries, text width=32mm, align=center},
+    arr/.style={-{Stealth}, thick},
+]
 
-Quando una chiave primaria è già presente in tabella, il framework esegue un \texttt{MERGE INTO} che aggiorna \emph{esclusivamente} le colonne del gruppo sorgente corrente, lasciando intatte le colonne degli altri gruppi. Se in un giorno arriva solo il gruppo \texttt{SALDI}, le colonne di \texttt{ANA} rimangono invariate nello snapshot Iceberg risultante.
+% --- Gruppo ANA ---
+\node[hdr] (ana-hdr) {Gruppo ANA};
+\node[grp, below=0mm of ana-hdr, text width=32mm] (ana-body) {%
+    CUSTOMER\_CODE (PK)\\
+    NOME\\
+    COGNOME\\
+    INDIRIZZO};
 
-\subsection{Staging e Promozione per Chiavi Nuove}
-\label{sec:record-compositi-staging}
+% --- Gruppo SALDI ---
+\node[hdr, below=8mm of ana-body] (sal-hdr) {Gruppo SALDI};
+\node[grp, below=0mm of sal-hdr, text width=32mm] (sal-body) {%
+    CUSTOMER\_CODE (PK)\\
+    SALDO\_ATTIVO\\
+    SALDO\_PASSIVO};
 
-Quando una chiave primaria non è ancora in tabella finale, perché non tutti i gruppi obbligatori sono ancora arrivati, il record non può essere inserito direttamente in forma incompleta. Viene invece scritto in una \textbf{tabella di staging} Iceberg dedicata, che accumula le contribuzioni dei vari gruppi mantenendo per ogni chiave la lista delle sorgenti già ricevute.
+% --- Tabella finale CLIENTE ---
+\node[hdr, right=22mm of ana-hdr] (cli-hdr) {CLIENTE};
+\node[grp, below=0mm of cli-hdr, text width=38mm] (cli-body) {%
+    CUSTOMER\_CODE (PK)\\[1pt]
+    \textcolor{gray!60!black}{-- gruppo ANA --}\\
+    NOME\\
+    COGNOME\\
+    INDIRIZZO\\[1pt]
+    \textcolor{gray!60!black}{-- gruppo SALDI --}\\
+    SALDO\_ATTIVO\\
+    SALDO\_PASSIVO};
 
-A ogni batch il framework verifica quali record in staging hanno ricevuto \emph{tutti} i gruppi obbligatori. I record completi vengono \textbf{promossi} alla tabella finale con un inserimento atomico e rimossi dallo staging; i record parziali rimangono in attesa, potenzialmente per più batch consecutivi. I gruppi assenti in un determinato batch vengono ignorati: il sistema accetta qualsiasi sottoinsieme di sorgenti in qualsiasi ordine senza produrre errori.
+% --- Frecce ---
+\draw[arr] (ana-body.east) -- ++(6mm,0) |- (cli-body.west);
+\draw[arr] (sal-body.east) -- ++(6mm,0) |- (cli-body.west);
+
+\end{tikzpicture}
+\caption{Esempio di record composito: due gruppi sorgente uniti sulla stessa chiave primaria.}
+\label{fig:record-composito}
+\end{figure}
+
+\subsection{Criticità nell'architettura esistente}
+
+Con l'architettura basata su Parquet, il pipeline di validazione richiedeva che il DataFrame in ingresso contenesse il record completo. 
+Il meccanismo di validazione opera infatti sullo schema full e produce l'output solo a partire da un record integro. Di conseguenza, se al giorno $T$ arrivava solo un aggiornamento parziale (ad esempio solo i dati economici), il sistema era costretto a ricaricare \emph{tutti} i file sorgente, ricostruire l'intero record e rieseguire il merge completo. Il costo computazionale scalava con il numero di sorgenti indipendentemente da quante fossero effettivamente cambiate.
+
+\subsection{Soluzione proposta: Merge per Gruppo e Staging Iceberg}
+
+Il \texttt{MERGE INTO} nativo di Iceberg rende possibile ciò che con Parquet non era realizzabile: aggiornare selettivamente le colonne di un solo gruppo sorgente, lasciando intatte quelle degli altri. L'architettura viene ridisegnata per processare ogni gruppo in modo indipendente, con due percorsi distinti in base allo stato della chiave primaria.
+
+\textbf{Chiave già presente in tabella.} Il sistema esegue un \texttt{MERGE INTO} che include nella clausola \texttt{UPDATE SET} esclusivamente le colonne del gruppo sorgente corrente. Se in un giorno arriva solo il gruppo dei dati economici, le colonne anagrafiche rimangono invariate: nessuna rilettura delle altre sorgenti è necessaria, e nessuna sovrascrittura accidentale è possibile. Ogni gruppo produce uno snapshot Iceberg atomico circoscritto al proprio sottoinsieme di colonne.
+
+\textbf{Chiave non ancora in tabella.} Se una chiave primaria è nuova e non tutti i gruppi obbligatori sono ancora arrivati, il record non può essere inserito direttamente nella tabella finale in forma incompleta. Viene invece scritto in una \textbf{tabella di staging} Iceberg dedicata, che accumula le contribuzioni dei vari gruppi e registra per ogni chiave quali sorgenti sono già state ricevute.
+
+A ogni batch, il framework verifica quali record in staging hanno ricevuto tutti i gruppi dichiarati come obbligatori. I record completi vengono \textbf{promossi} alla tabella finale con un inserimento atomico e rimossi dallo staging; i record parziali vi rimangono in attesa, potenzialmente per più batch consecutivi. I gruppi assenti in un determinato batch vengono semplicemente ignorati: il sistema è progettato per ricevere qualsiasi sottoinsieme di sorgenti in qualsiasi ordine, senza generare errori né perdite di dati.
 
 \chapter{Test e risultati}
 \label{chap:testing-and-results}
